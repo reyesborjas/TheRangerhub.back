@@ -1,0 +1,15 @@
+{
+    "username": "dcortesnet",
+    "first_name": "Diego",
+    "last_name": "Cortes",
+    "nationality": "Chileno",
+    "rut": "17811265-1",
+    "passport_number": null,
+    "role_id": "546ee054-0ac9-42b5-b5b5-595976297d79",
+    "biography": "test",
+    "email": "diego.cortes@gmail.com",
+    "availability_start_date": "2025-01-01",
+    "availability_end_date": "2025-12-31",
+    "user_status": "activo",
+    "profile_visibility": true
+}
