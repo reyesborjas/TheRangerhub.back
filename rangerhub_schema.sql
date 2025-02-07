@@ -110,7 +110,7 @@ CREATE TABLE resources (
    id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
    name varchar(100) NOT NULL UNIQUE,
    description jsonb NOT NULL,
-   cost numeric(10,2) NOT NULL,
+   cost numeric(10,2) NOT NULL
 );
 
 
