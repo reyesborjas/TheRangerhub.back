@@ -30,5 +30,5 @@ Deploy the example using [Vercel](https://vercel.com?utm_source=github&utm_mediu
 # Migrar dependencias al requirements.txt
 
 ```
-pip freeze > requirements.txt
+ pip freeze > requirements.txt
 ```
