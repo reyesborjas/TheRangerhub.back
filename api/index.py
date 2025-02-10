@@ -105,8 +105,8 @@ def get_roles():
         connection.close()
 
 @app.route('/login', methods=['POST'])
+@app.route('/login', methods=['POST'])
 def login():
-    """Autentica a un usuario y genera un token JWT"""
     connection = get_db_connection()
     if not connection:
         return jsonify({"message": "Error de conexión con la base de datos"}), 500
@@ -120,10 +120,9 @@ def login():
         if not username or not password:
             return jsonify({"message": "Debe ingresar usuario y contraseña"}), 400
 
-        hashed_password = hash_password(password)
-
-        cursor.execute("SELECT id, username, role_id FROM users WHERE username = %s AND password = %s", 
-                       (username, hashed_password))
+        # VALIDACIÓN USANDO `crypt()` EN POSTGRESQL
+        cursor.execute("SELECT id, username, role_id FROM users WHERE username = %s AND password = crypt(%s, password)", 
+                       (username, password))
         user = cursor.fetchone()
 
         if user:
@@ -144,7 +143,7 @@ def login():
     finally:
         cursor.close()
         connection.close()
-
+        
 @app.route('/trips', methods=['POST'])
 def create_trip():
     """Crea un nuevo viaje"""
