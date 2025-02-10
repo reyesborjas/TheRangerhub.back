@@ -64,15 +64,14 @@ def register():
         cursor.execute("""
             INSERT INTO users (
                 username, first_name, last_name, nationality, rut, passport_number, 
-                role_id, biography, email, password, availability_start_date, 
-                availability_end_date, user_status, profile_visibility
+                role_id, biography, email, password
+                
             ) 
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         """, (body["username"], body["first_name"], body["last_name"], body["nationality"], 
               body["rut"], body["passport_number"], body["role_id"], 
-              body["biography"], body["email"], hashed_password, 
-              body["availability_start_date"], body["availability_end_date"], 
-              body["user_status"], body["profile_visibility"]))
+              body["biography"], body["email"], hashed_password 
+              ))
         
         connection.commit()
         return jsonify({"message": "Usuario creado correctamente"}), 201
