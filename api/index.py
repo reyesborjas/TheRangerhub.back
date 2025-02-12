@@ -104,7 +104,6 @@ def get_roles():
         connection.close()
 
 @app.route('/login', methods=['POST'])
-@app.route('/login', methods=['POST'])
 def login():
     connection = get_db_connection()
     if not connection:
@@ -119,9 +118,10 @@ def login():
         if not username or not password:
             return jsonify({"message": "Debe ingresar usuario y contraseña"}), 400
 
-        # VALIDACIÓN USANDO `crypt()` EN POSTGRESQL
-        cursor.execute("SELECT id, username, role_id FROM users WHERE username = %s AND password = crypt(%s, password)", 
-                       (username, password))
+        hashed_password = hash_password(password)  # Hashear la contraseña ingresada
+
+        cursor.execute("SELECT id, username, role_id FROM users WHERE username = %s AND password = %s", 
+                       (username, hashed_password))
         user = cursor.fetchone()
 
         if user:
@@ -142,6 +142,7 @@ def login():
     finally:
         cursor.close()
         connection.close()
+
         
 @app.route('/trips', methods=['POST'])
 def create_trip():
