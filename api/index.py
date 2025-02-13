@@ -117,14 +117,14 @@ def login():
 
         if not username or not password:
             return jsonify({"message": "Debe ingresar usuario y contraseña"}), 400
-
+       
         hashed_password = hash_password(password)  # Hashear la contraseña ingresada
-
-        cursor.execute("SELECT id, username, role_id FROM users WHERE username = %s AND password = %s", 
-                       (username, hashed_password))
+       
+        cursor.execute("SELECT id, username, role_id, password FROM users WHERE username = %s", 
+                       (username,))
         user = cursor.fetchone()
-
-        if user:
+        
+        if user and user["password"] == hashed_password:
             token = jwt.encode({
                 "user_id": user["id"],
                 "username": user["username"],
@@ -177,4 +177,4 @@ def create_trip():
 if __name__ == "__main__":
     app.run(host="0.0.0.0", debug=True, port=5000)
 
-# app.run(host='0.0.0.0', debug=True, port=5000).
+#app.run(host='0.0.0.0', debug=True, port=5000)
