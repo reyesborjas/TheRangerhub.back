@@ -142,7 +142,87 @@ def login():
     finally:
         cursor.close()
         connection.close()
+        
+        
+@app.route('/activities', methods=['POST'])
+def create_activity():
+    connection = get_db_connection()
+    if not connection:
+        return jsonify({"message": "Error de conexión con la base de datos"}), 500
 
+    cursor = connection.cursor()
+    try:
+        body = request.get_json()
+
+        cursor.execute("""
+            INSERT INTO activities (
+                category_id, location_id, name, description, duration, difficulty, 
+                min_participants, max_participants, cancellation_policy, is_available, 
+                is_public, cost, activity_image_url
+            ) 
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        """, (
+            body["category_id"], body["location_id"], body["name"], body["description"], 
+            body["duration"], body["difficulty"], body["min_participants"], body["max_participants"], 
+            body["cancellation_policy"], body["is_available"], body["is_public"], 
+            body["cost"], body["activity_image_url"]
+        ))
+
+        connection.commit()
+        return jsonify({"message": "Actividad creada correctamente"}), 201
+    except Exception as e:
+        logging.error(f"Error al crear la actividad: {e}")
+        return jsonify({"message": "Error al crear la actividad"}), 500
+    finally:
+        cursor.close()
+        connection.close()
+        
+@app.route('/activitycategory', methods=['GET'])  
+def get_activities():  
+    """Obtiene todas las categorías de actividades"""  
+    connection = get_db_connection()  
+    if not connection:  
+        return jsonify({"message": "Error de conexión con la base de datos"}), 500  
+
+    cursor = connection.cursor(dictionary=True)  # Esto devuelve los resultados como diccionarios
+    try:  
+        cursor.execute("SELECT * FROM activity_categories")  
+        activity_categories = cursor.fetchall()  
+
+        if not activity_categories:  
+            return jsonify({"message": "No hay categorías disponibles"}), 404  
+
+        return jsonify({"categories": activity_categories}), 200  
+    except Exception as e:  
+        logging.error(f"Error al obtener categorías: {e}")  
+        return jsonify({"message": "Error al obtener las categorías"}), 500  
+    finally:  
+        cursor.close()  
+        connection.close()  
+        
+@app.route('/locations', methods=['GET'])
+def get_locations():
+    """Obtiene todas las localizaciones de actividades"""
+    connection = get_db_connection()
+    if not connection:
+        return jsonify({"message": "Error de conexión con la base de datos", "status_code": 500}), 500
+
+    cursor = connection.cursor(dictionary=True)
+    try:
+        cursor.execute("SELECT * FROM locations")
+        locations = cursor.fetchall()
+
+        if not locations:
+            return jsonify({"message": "No hay localizaciones disponibles", "status_code": 404}), 404
+
+        return jsonify({"locations": locations, "status_code": 200}), 200
+    except mysql.connector.Error as e:
+        logging.error(f"Error al obtener localizaciones: {e}")
+        return jsonify({"message": "Error al obtener las localizaciones", "status_code": 500}), 500
+    finally:
+        cursor.close()
+        if connection.is_connected():
+            connection.close()
         
 @app.route('/trips', methods=['POST'])
 def create_trip():
