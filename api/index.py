@@ -144,7 +144,7 @@ def login():
         connection.close()
         
         
-@app.route('/activities', methods=['POST'])
+@app.route('/activities', methods=['GET', 'POST'])
 def create_activity():
     connection = get_db_connection()
     if not connection:
@@ -237,12 +237,12 @@ def create_trip():
 
         cursor.execute("""
             INSERT INTO trips (
-                title, description, start_date, end_date, destination, user_id, trip_status, 
+                title, description, start_date, end_date, destination, trip_status, 
                 participants_number, estimated_weather_forecast, total_cost, trip_image_url
             ) 
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         """, (body["title"], body["description"], body["start_date"], body["end_date"], body["destination"], 
-              body["user_id"], body["trip_status"], body["participants_number"], 
+              body["trip_status"], body["participants_number"], 
               body["estimated_weather_forecast"], body["total_cost"], body["trip_image_url"]))
 
         connection.commit()
