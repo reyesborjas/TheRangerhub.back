@@ -65,7 +65,6 @@ def register():
             INSERT INTO users (
                 username, first_name, last_name, nationality, rut, passport_number, 
                 role_id, biography, email, password
-                
             ) 
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         """, (body["username"], body["first_name"], body["last_name"], body["nationality"], 
@@ -142,9 +141,8 @@ def login():
     finally:
         cursor.close()
         connection.close()
-        
-        
-@app.route('/activities', methods=['GET', 'POST'])
+
+@app.route('/activities', methods=['POST', 'GET'])
 def create_activity():
     connection = get_db_connection()
     if not connection:
@@ -152,33 +150,56 @@ def create_activity():
 
     cursor = connection.cursor()
     try:
-        body = request.get_json()
+        # Si el método es POST, insertamos una nueva actividad
+        if request.method == 'POST':
+            body = request.get_json()
 
-        cursor.execute("""
-            INSERT INTO activities (
-                category_id, location_id, name, description, duration, difficulty, 
-                min_participants, max_participants, cancellation_policy, is_available, 
-                is_public, cost, activity_image_url
-            ) 
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-        """, (
-            body["category_id"], body["location_id"], body["name"], body["description"], 
-            body["duration"], body["difficulty"], body["min_participants"], body["max_participants"], 
-            body["cancellation_policy"], body["is_available"], body["is_public"], 
-            body["cost"], body["activity_image_url"]
-        ))
+            # Inserción de la actividad en la tabla activities
+            cursor.execute("""
+                INSERT INTO activities (
+                    category_id, location_id, name, description, duration, difficulty, 
+                    min_participants, max_participants, cancellation_policy, is_available, 
+                    is_public, cost, activity_image_url
+                ) 
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                RETURNING id
+            """, (
+                body["category_id"], body["location_id"], body["name"], body["description"], 
+                body["duration"], body["difficulty"], body["min_participants"], body["max_participants"], 
+                body["cancellation_policy"], body["is_available"], body["is_public"], 
+                body["cost"], body["activity_image_url"]
+            ))
 
-        connection.commit()
-        return jsonify({"message": "Actividad creada correctamente"}), 201
+            activity_id = cursor.fetchone()[0]  # Obtenemos el id de la actividad recién insertada
+
+            # Ahora, relacionamos la actividad con un viaje (usando trip_id de la solicitud)
+            cursor.execute("""
+                INSERT INTO activity_trips (activity_id, trip_id)
+                VALUES (%s, %s)
+            """, (activity_id, body["trip_id"]))  # Se espera que body contenga el trip_id
+
+            connection.commit()
+            return jsonify({"message": "Actividad creada y asociada al viaje correctamente"}), 201
+
+        # Si es GET, devuelve las actividades (o categorías de actividades según necesidad)
+        elif request.method == 'GET':
+            cursor.execute("SELECT * FROM activities")
+            activities = cursor.fetchall()
+
+            if not activities:
+                return jsonify({"message": "No hay actividades disponibles"}), 404
+
+            return jsonify({"activities": activities}), 200
+
     except Exception as e:
-        logging.error(f"Error al crear la actividad: {e}")
-        return jsonify({"message": "Error al crear la actividad"}), 500
+        logging.error(f"Error al crear o consultar la actividad: {e}")
+        return jsonify({"message": "Error al crear o consultar la actividad"}), 500
     finally:
         cursor.close()
         connection.close()
-        
+
 @app.route('/activitycategory', methods=['GET'])  
-def get_activities():  
+def get_activity_categories():  
     """Obtiene todas las categorías de actividades"""  
     connection = get_db_connection()  
     if not connection:  
@@ -199,7 +220,7 @@ def get_activities():
     finally:  
         cursor.close()  
         connection.close()  
-        
+
 @app.route('/locations', methods=['GET'])
 def get_locations():
     """Obtiene todas las localizaciones de actividades"""
@@ -223,7 +244,7 @@ def get_locations():
         cursor.close()
         if connection.is_connected():
             connection.close()
-        
+
 @app.route('/trips', methods=['POST'])
 def create_trip():
     """Crea un nuevo viaje"""
@@ -242,8 +263,8 @@ def create_trip():
             ) 
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         """, (body["title"], body["description"], body["start_date"], body["end_date"], body["destination"], 
-              body["trip_status"], body["participants_number"], 
-              body["estimated_weather_forecast"], body["total_cost"], body["trip_image_url"]))
+              body["trip_status"], body["participants_number"], body["estimated_weather_forecast"], 
+              body["total_cost"], body["trip_image_url"]))
 
         connection.commit()
         return jsonify({"message": "Viaje creado correctamente"}), 201
@@ -255,6 +276,4 @@ def create_trip():
         connection.close()
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", debug=True, port=5000)
-
-#app.run(host='0.0.0.0', debug=True, port=5000)
+    app.run(debug=True)
