@@ -258,7 +258,7 @@ def create_trip():
 
         cursor.execute("""
             INSERT INTO trips (
-                trip_namw, description, start_date, end_date, trip_status, 
+                trip_name, description, start_date, end_date, trip_status, 
                 participants_number, estimated_weather_forecast, total_cost, trip_image_url
             ) 
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
