@@ -258,11 +258,11 @@ def create_trip():
 
         cursor.execute("""
             INSERT INTO trips (
-                title, description, start_date, end_date, destination, trip_status, 
+                title, description, start_date, end_date, trip_status, 
                 participants_number, estimated_weather_forecast, total_cost, trip_image_url
             ) 
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-        """, (body["title"], body["description"], body["start_date"], body["end_date"], body["destination"], 
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+        """, (body["title"], body["description"], body["start_date"], body["end_date"], 
               body["trip_status"], body["participants_number"], body["estimated_weather_forecast"], 
               body["total_cost"], body["trip_image_url"]))
 
