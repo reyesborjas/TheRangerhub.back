@@ -40,6 +40,7 @@ CREATE TABLE trips (
     updated_at TIMESTAMP with time zone,
     total_cost numeric(10,2),
     trip_image_url varchar(255)
+    trip_name varchar(50) UNIQUE
 );
 
 
