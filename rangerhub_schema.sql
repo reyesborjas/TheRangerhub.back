@@ -34,7 +34,7 @@ CREATE TABLE trips (
     end_date timestamptz NOT NULL,
     participants_number integer NOT NULL,
     trip_status VARCHAR(50) NOT NULL DEFAULT 'pendiente',
-    estimated_weather_forecast jsonb,
+    estimated_weather_forecast text,
     description text ,
     created_at TIMESTAMP with time zone DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP with time zone,
