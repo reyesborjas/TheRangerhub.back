@@ -205,7 +205,7 @@ def get_activity_categories():
     if not connection:  
         return jsonify({"message": "Error de conexión con la base de datos"}), 500  
 
-    cursor = connection.cursor(dictionary=True)  # Esto devuelve los resultados como diccionarios
+    cursor = connection.cursor()
     try:  
         cursor.execute("SELECT * FROM activity_categories")  
         activity_categories = cursor.fetchall()  
@@ -218,8 +218,8 @@ def get_activity_categories():
         logging.error(f"Error al obtener categorías: {e}")  
         return jsonify({"message": "Error al obtener las categorías"}), 500  
     finally:  
-        cursor.close()  
-        connection.close()  
+        cursor.close()
+        connection.close()
 
 @app.route('/locations', methods=['GET'])
 def get_locations():
