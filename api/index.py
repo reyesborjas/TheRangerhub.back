@@ -158,7 +158,7 @@ def create_activity():
             cursor.execute("""
                 INSERT INTO activities (
                     category_id, location_id, name, description, duration, difficulty, 
-                    min_participants, max_participants, cancellation_policy, is_available, 
+                    min_participants, max_participants, is_available, 
                     is_public, cost, activity_image_url
                 ) 
                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
@@ -298,7 +298,7 @@ def get_rangers():
         if not rangers:
             return jsonify({"message": "No hay rangers disponibles"}), 404
 
-        # Formatear la respuesta como "Nombre Apellido (Usuario)"
+       
         formatted_rangers = [
             {"full_name": f"{r['first_name']} {r['last_name']} ({r['username']})"}
             for r in rangers
@@ -316,6 +316,6 @@ def get_rangers():
 if __name__ == "__main__":
     app.run(host="0.0.0.0", debug=True, port=5000)
 
-#app.run(host='0.0.0.0', debug=True, port=5000)
+
   
 
