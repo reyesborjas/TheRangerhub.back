@@ -277,3 +277,23 @@ def create_trip():
 
 if __name__ == "__main__":
     app.run(debug=True)
+
+@app.route('/rangers', methods=['GET'])
+def get_rangers():
+    connection = get_db_connection()
+    if not connection:
+        return jsonify({"message": "Error de conexión con la base de datos"}), 500
+
+    cursor = connection.cursor()
+    try:
+        cursor.execute("SELECT * FROM users WHERE role_id = 8f285ee6-7ded-473d-8c57-5159a489e7e6")
+        rangers = cursor.fetchall()
+        if not rangers:
+            return jsonify({"message": "No hay rangers disponibles"}), 404
+        return jsonify({"rangers": rangers}), 200
+    except Exception as e:
+        logging.error(f"Error al obtener rangers: {e}")
+        return jsonify({"message": "Error al obtener los rangers"}), 500
+    finally:
+        cursor.close()
+        connection.close()
