@@ -226,25 +226,24 @@ def get_locations():
     """Obtiene todas las localizaciones de actividades"""
     connection = get_db_connection()
     if not connection:
-        return jsonify({"message": "Error de conexión con la base de datos", "status_code": 500}), 500
+        return jsonify({"message": "Error de conexión con la base de datos"}), 500
 
-    cursor = connection.cursor(dictionary=True)
+    cursor = connection.cursor()
     try:
         cursor.execute("SELECT * FROM locations")
         locations = cursor.fetchall()
 
         if not locations:
-            return jsonify({"message": "No hay localizaciones disponibles", "status_code": 404}), 404
+            return jsonify({"message": "No hay localizaciones disponibles"}), 404
 
-        return jsonify({"locations": locations, "status_code": 200}), 200
-    except mysql.connector.Error as e:
+        return jsonify({"locations": locations}), 200
+    except Exception as e:  # ✅ Corregido para PostgreSQL
         logging.error(f"Error al obtener localizaciones: {e}")
-        return jsonify({"message": "Error al obtener las localizaciones", "status_code": 500}), 500
+        return jsonify({"message": "Error al obtener las localizaciones"}), 500
     finally:
         cursor.close()
-        if connection.is_connected():
-            connection.close()
-
+        connection.close()
+        
 @app.route('/trips', methods=['POST'])
 def create_trip():
     """Crea un nuevo viaje"""
