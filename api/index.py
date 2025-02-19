@@ -8,17 +8,17 @@ import logging
 from psycopg2.extras import RealDictCursor
 from dotenv import load_dotenv
 from flask_cors import CORS
+import uuid 
 
-# Cargar variables de entorno
+
 load_dotenv()
 
 app = Flask(__name__)
 CORS(app)
 
-# Configuración de logging
 logging.basicConfig(level=logging.INFO)
 
-# Usar SECRET_KEY desde variables de entorno
+
 SECRET_KEY = os.getenv("SECRET_KEY", "super_secreto_por_defecto")
 
 def get_db_connection():
@@ -286,8 +286,9 @@ def get_rangers():
 
     cursor = connection.cursor()
     try:
-        # Usamos %s para evitar SQL Injection y asegurar compatibilidad con UUID
-        cursor.execute("SELECT * FROM users WHERE role_id = %s", ('8f285ee6-7ded-473d-8c57-5159a489e7e6',))
+        ranger_role_id = uuid.UUID('8f285ee6-7ded-473d-8c57-5159a489e7e6')  # Convertirlo a UUID
+        cursor.execute("SELECT * FROM users WHERE role_id = %s::uuid", (str(ranger_role_id),))  # Pasarlo como string
+
         rangers = cursor.fetchall()
         if not rangers:
             return jsonify({"message": "No hay rangers disponibles"}), 404
