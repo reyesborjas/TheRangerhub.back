@@ -275,8 +275,7 @@ def create_trip():
         cursor.close()
         connection.close()
 
-if __name__ == "__main__":
-    app.run(debug=True)
+import uuid
 
 @app.route('/rangers', methods=['GET'])
 def get_rangers():
@@ -286,13 +285,27 @@ def get_rangers():
 
     cursor = connection.cursor()
     try:
-        ranger_role_id = uuid.UUID('8f285ee6-7ded-473d-8c57-5159a489e7e6')  # Convertirlo a UUID
-        cursor.execute("SELECT * FROM users WHERE role_id = %s::uuid", (str(ranger_role_id),))  # Pasarlo como string
+        ranger_role_id = uuid.UUID('8f285ee6-7ded-473d-8c57-5159a489e7e6')
+
+        cursor.execute("""
+            SELECT first_name, last_name, username 
+            FROM users 
+            WHERE role_id = %s::uuid
+        """, (str(ranger_role_id),))
 
         rangers = cursor.fetchall()
+
         if not rangers:
             return jsonify({"message": "No hay rangers disponibles"}), 404
-        return jsonify({"rangers": rangers}), 200
+
+        # Formatear la respuesta como "Nombre Apellido (Usuario)"
+        formatted_rangers = [
+            {"full_name": f"{r['first_name']} {r['last_name']} ({r['username']})"}
+            for r in rangers
+        ]
+
+        return jsonify({"rangers": formatted_rangers}), 200
+
     except Exception as e:
         logging.error(f"Error al obtener rangers: {e}")
         return jsonify({"message": "Error al obtener los rangers"}), 500
