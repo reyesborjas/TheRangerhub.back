@@ -41,6 +41,7 @@ CREATE TABLE trips (
     total_cost numeric(10,2),
     trip_image_url varchar(255)
     trip_name varchar(50) UNIQUE
+    lead_ranger UUID REFERENCES users(id)
 );
 
 
@@ -139,5 +140,12 @@ CREATE TABLE ranger_certifications (
     certification_id uuid NOT NULL REFERENCES certifications(id),
     user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     UNIQUE(certification_id, user_id)
+);
+
+CREATE TABLE ranger_activities (
+    id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+    activity_id uuid NOT NULL REFERENCES activities(id),
+    user_id uuid NOT NULL REFERENCES users(id),
+    UNIQUE(activity_id, user_id)
 );
 
