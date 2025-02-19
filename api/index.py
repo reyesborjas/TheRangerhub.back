@@ -286,7 +286,8 @@ def get_rangers():
 
     cursor = connection.cursor()
     try:
-        cursor.execute("SELECT * FROM users WHERE role_id = 8f285ee6-7ded-473d-8c57-5159a489e7e6")
+        # Usamos %s para evitar SQL Injection y asegurar compatibilidad con UUID
+        cursor.execute("SELECT * FROM users WHERE role_id = %s", ('8f285ee6-7ded-473d-8c57-5159a489e7e6',))
         rangers = cursor.fetchall()
         if not rangers:
             return jsonify({"message": "No hay rangers disponibles"}), 404
@@ -297,3 +298,10 @@ def get_rangers():
     finally:
         cursor.close()
         connection.close()
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", debug=True, port=5000)
+
+#app.run(host='0.0.0.0', debug=True, port=5000)
+  
+
