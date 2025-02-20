@@ -220,9 +220,34 @@ def get_activity_categories():
     finally:  
         cursor.close()
         connection.close()
-
+        
 @app.route('/locations', methods=['GET'])
 def get_locations():
+    connection = get_db_connection()
+    if not connection:
+        logging.error("❌ Error: No se pudo conectar a la base de datos")
+        return jsonify({"message": "Error de conexión con la base de datos"}), 500
+
+    cursor = connection.cursor(cursor_factory=psycopg2.extras.DictCursor)
+    
+    try:
+        cursor.execute("SELECT * FROM locations")
+        locations = cursor.fetchall()
+
+        if not locations:
+            logging.warning("⚠️ No hay localizaciones disponibles en la BD")
+            return jsonify({"message": "No hay localizaciones disponibles"}), 404
+
+        # Convertir cada fila en un diccionario y devolver un array
+        locations_list = [dict(row) for row in locations]
+        return jsonify({"locations": locations_list}), 200
+    
+    except Exception as e: 
+        logging.error(f"Error al obtener localizaciones: {e}")
+        return jsonify({"message": "Error al obtener las localizaciones"}), 500
+    finally:
+        cursor.close()
+        connection.close()
     
     connection = get_db_connection()
     if not connection:
