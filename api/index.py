@@ -8,8 +8,7 @@ import logging
 from psycopg2.extras import RealDictCursor
 from dotenv import load_dotenv
 from flask_cors import CORS
-import uuid 
-
+import uuid
 
 load_dotenv()
 
@@ -17,7 +16,6 @@ app = Flask(__name__)
 CORS(app)
 
 logging.basicConfig(level=logging.INFO)
-
 
 SECRET_KEY = os.getenv("SECRET_KEY", "super_secreto_por_defecto")
 
@@ -171,17 +169,14 @@ def create_activity():
             ))
 
             activity_id = cursor.fetchone()[0]  # Obtenemos el id de la actividad recién insertada
-
-            # Ahora, relacionamos la actividad con un viaje (usando trip_id de la solicitud)
-            cursor.execute("""
-                INSERT INTO activity_trips (activity_id, trip_id)
-                VALUES (%s, %s)
-            """, (activity_id, body["trip_id"]))  # Se espera que body contenga el trip_id
-
             connection.commit()
-            return jsonify({"message": "Actividad creada y asociada al viaje correctamente"}), 201
 
-        # Si es GET, devuelve las actividades (o categorías de actividades según necesidad)
+            return jsonify({
+                "message": "Actividad creada correctamente",
+                "activity_id": activity_id
+            }), 201
+
+        # Si es GET, devuelve las actividades
         elif request.method == 'GET':
             cursor.execute("SELECT * FROM activities")
             activities = cursor.fetchall()
@@ -194,6 +189,34 @@ def create_activity():
     except Exception as e:
         logging.error(f"Error al crear o consultar la actividad: {e}")
         return jsonify({"message": "Error al crear o consultar la actividad"}), 500
+    finally:
+        cursor.close()
+        connection.close()
+
+@app.route('/activity_trips', methods=['POST'])
+def associate_activity_trip():
+    """Asocia una actividad a un viaje"""
+    connection = get_db_connection()
+    if not connection:
+        return jsonify({"message": "Error de conexión con la base de datos"}), 500
+
+    cursor = connection.cursor()
+    try:
+        body = request.get_json()
+        print("Datos recibidos para asociar actividad y viaje:", body)
+
+        # Inserción en la tabla activity_trips
+        cursor.execute("""
+            INSERT INTO activity_trips (activity_id, trip_id)
+            VALUES (%s, %s)
+        """, (body["activity_id"], body["trip_id"]))
+
+        connection.commit()
+        return jsonify({"message": "Actividad asociada al viaje correctamente"}), 201
+
+    except Exception as e:
+        logging.error(f"Error al asociar actividad y viaje: {e}")
+        return jsonify({"message": "Error al asociar actividad y viaje"}), 500
     finally:
         cursor.close()
         connection.close()
@@ -220,7 +243,7 @@ def get_activity_categories():
     finally:  
         cursor.close()
         connection.close()
-        
+
 @app.route('/locations', methods=['GET'])
 def get_locations():
     connection = get_db_connection()
@@ -248,31 +271,7 @@ def get_locations():
     finally:
         cursor.close()
         connection.close()
-    
-    connection = get_db_connection()
-    if not connection:
-        logging.error("❌ Error: No se pudo conectar a la base de datos")
-        return jsonify({"message": "Error de conexión con la base de datos"}), 500
 
-    cursor = connection.cursor(cursor_factory=psycopg2.extras.DictCursor    )
-    
-    try:
-        cursor.execute("SELECT * FROM locations")
-        locations = cursor.fetchall()
-
-        if not locations:
-            logging.warning("⚠️ No hay localizaciones disponibles en la BD")
-            return jsonify({"message": "No hay localizaciones disponibles"}), 404
-
-        return jsonify({"locations": dict(row) for row in locations}), 200
-    
-    except Exception as e: 
-        logging.error(f"Error al obtener localizaciones: {e}")
-        return jsonify({"message": "Error al obtener las localizaciones"}), 500
-    finally:
-        cursor.close()
-        connection.close()
-        
 @app.route('/trips', methods=['POST'])
 def create_trip():
     """Crea un nuevo viaje"""
@@ -303,8 +302,6 @@ def create_trip():
         cursor.close()
         connection.close()
 
-import uuid
-
 @app.route('/rangers', methods=['GET'])
 def get_rangers():
     connection = get_db_connection()
@@ -326,7 +323,6 @@ def get_rangers():
         if not rangers:
             return jsonify({"message": "No hay rangers disponibles"}), 404
 
-       
         formatted_rangers = [
             {"full_name": f"{r['first_name']} {r['last_name']} ({r['username']})"}
             for r in rangers
@@ -343,7 +339,3 @@ def get_rangers():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", debug=True, port=5000)
-
-
-  
-
