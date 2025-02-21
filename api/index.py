@@ -148,6 +148,55 @@ def create_activity():
 
     cursor = connection.cursor()
     try:
+        if request.method == 'POST':
+            body = request.get_json()
+            print("Datos recibidos:", body)  # Registra los datos recibidos
+
+            # Inserción de la actividad en la tabla activities
+            cursor.execute("""
+                INSERT INTO activities (
+                    category_id, location_id, name, description, duration, difficulty, 
+                    min_participants, max_participants, is_available, 
+                    is_public, cost, activity_image_url
+                ) 
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                RETURNING id
+            """, (
+                body["category_id"], body["location_id"], body["name"], body["description"], 
+                body["duration"], body["difficulty"], body["min_participants"], body["max_participants"], 
+                body["is_available"], body["is_public"], 
+                body["cost"], body["activity_image_url"]
+            ))
+
+            activity_id = cursor.fetchone()[0]  # Obtenemos el id de la actividad recién insertada
+            connection.commit()
+
+            return jsonify({
+                "message": "Actividad creada correctamente",
+                "activity_id": activity_id
+            }), 201
+
+        elif request.method == 'GET':
+            cursor.execute("SELECT * FROM activities")
+            activities = cursor.fetchall()
+
+            if not activities:
+                return jsonify({"message": "No hay actividades disponibles"}), 404
+
+            return jsonify({"activities": activities}), 200
+
+    except Exception as e:
+        logging.error(f"Error al crear o consultar la actividad: {e}")
+        return jsonify({"message": "Error al crear o consultar la actividad"}), 500
+    finally:
+        cursor.close()
+        connection.close()
+    connection = get_db_connection()
+    if not connection:
+        return jsonify({"message": "Error de conexión con la base de datos"}), 500
+
+    cursor = connection.cursor()
+    try:
         # Si el método es POST, insertamos una nueva actividad
         if request.method == 'POST':
             body = request.get_json()
