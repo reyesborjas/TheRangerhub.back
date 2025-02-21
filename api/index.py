@@ -161,12 +161,12 @@ def create_activity():
                     min_participants, max_participants, is_available, 
                     is_public, cost, activity_image_url
                 ) 
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 RETURNING id
             """, (
                 body["category_id"], body["location_id"], body["name"], body["description"], 
                 body["duration"], body["difficulty"], body["min_participants"], body["max_participants"], 
-                body["cancellation_policy"], body["is_available"], body["is_public"], 
+                body["is_available"], body["is_public"], 
                 body["cost"], body["activity_image_url"]
             ))
 
