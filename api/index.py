@@ -150,15 +150,16 @@ def create_activity():
     try:
         if request.method == 'POST':
             body = request.get_json()
-            print("Datos recibidos:", body)  # Registra los datos recibidos
+            if not body:
+                return jsonify({"message": "No se proporcionaron datos"}), 400
 
             # Validar tipos de datos
             try:
-                duration = float(body["duration"])
-                min_participants = int(body["min_participants"])
-                max_participants = int(body["max_participants"])
-                cost = float(body["cost"])
-            except (ValueError, KeyError) as e:
+                duration = float(body.get("duration"))
+                min_participants = int(body.get("min_participants"))
+                max_participants = int(body.get("max_participants"))
+                cost = float(body.get("cost"))
+            except (ValueError, TypeError) as e:
                 return jsonify({"message": f"Error en los tipos de datos: {str(e)}"}), 400
 
             # Inserción de la actividad en la tabla activities
@@ -171,10 +172,10 @@ def create_activity():
                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 RETURNING id
             """, (
-                body["category_id"], body["location_id"], body["name"], body["description"], 
-                duration, body["difficulty"], min_participants, max_participants, 
-                body["is_available"], body["is_public"], cost, 
-                body.get("activity_image_url")  # Enviar NULL si no se proporciona
+                body.get("category_id"), body.get("location_id"), body.get("name"), 
+                body.get("description"), duration, body.get("difficulty"), 
+                min_participants, max_participants, body.get("is_available", True), 
+                body.get("is_public", True), cost, body.get("activity_image_url")
             ))
 
             activity_id = cursor.fetchone()[0]  # Obtenemos el id de la actividad recién insertada
@@ -200,7 +201,6 @@ def create_activity():
     finally:
         cursor.close()
         connection.close()
-
 @app.route('/activity_trips', methods=['POST'])
 def associate_activity_trip():
     """Asocia una actividad a un viaje"""
