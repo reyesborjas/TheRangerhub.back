@@ -92,7 +92,7 @@ CREATE TABLE activities (
     difficulty varchar(20) NOT NULL,
     min_participants integer NOT NULL,
     max_participants integer NOT NULL,
-    cancellation_policy text NOT NULL,
+    cancellation_policy text,
     is_available boolean NOT NULL DEFAULT TRUE,
     is_public boolean NOT NULL DEFAULT TRUE,
     created_at TIMESTAMP with time zone DEFAULT CURRENT_TIMESTAMP,
