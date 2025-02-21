@@ -186,7 +186,7 @@ def create_activity():
             return jsonify({"activities": activities}), 200
 
     except Exception as e:
-        logging.error(f"Error al crear o consultar la actividad: {e}")
+        logging.error(f"Error al crear la actividad {e}")
         return jsonify({"message": "Error al crear la actividad"}), 500
     finally:
         cursor.close()
