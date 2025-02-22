@@ -344,6 +344,50 @@ def get_rangers():
     finally:
         cursor.close()
         connection.close()
+        
+@app.route('/trips', methods=['GET'])  
+def get_trips():
+    connection = get_db_connection()  
+    if not connection:  
+        return jsonify({"message": "Error de conexión con la base de datos"}), 500  
+
+    cursor = connection.cursor()
+    try:  
+        cursor.execute("SELECT * FROM trips")  
+        trips = cursor.fetchall()  
+
+        if not trips:  
+            return jsonify({"message": "No hay viajes disponibles"}), 404  
+
+        return jsonify({"trips": trips}), 200  
+    except Exception as e:  
+        logging.error(f"Error al obtener viajes: {e}")  
+        return jsonify({"message": "Error al obtener los viajes"}), 500  
+    finally:  
+        cursor.close()
+        connection.close()
+        
+@app.route('/resources', methods=['GET']) 
+def get_resources():  
+    connection = get_db_connection()  
+    if not connection:  
+        return jsonify({"message": "Error de conexión con la base de datos"}), 500  
+
+    cursor = connection.cursor()
+    try:  
+        cursor.execute("SELECT * FROM resources")  
+        resources = cursor.fetchall()  
+
+        if not resources:  
+            return jsonify({"message": "No hay recursos disponibles"}), 404  
+
+        return jsonify({"resources": resources}), 200  
+    except Exception as e:  
+        logging.error(f"Error al obtener recursos: {e}")  
+        return jsonify({"message": "Error al obtener los recursos"}), 500  
+    finally:  
+        cursor.close()
+        connection.close()
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", debug=True, port=5000)
