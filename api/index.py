@@ -274,26 +274,89 @@ def get_activity_categories():
 def get_locations():
     connection = get_db_connection()
     if not connection:
-        logging.error("❌ Error: No se pudo conectar a la base de datos")
-        return jsonify({"message": "Error de conexión con la base de datos"}), 500
+        return jsonify({"message": "Error de conexión"}), 500
 
     cursor = connection.cursor(cursor_factory=psycopg2.extras.DictCursor)
-    
     try:
-        cursor.execute("SELECT * FROM locations")
+        # Parámetros de búsqueda y filtrado
+        search_query = request.args.get('search', '').lower()
+        country = request.args.get('country', '').lower()
+        province = request.args.get('province', '').lower()
+        place_name = request.args.get('place_name', '').lower()
+        
+        # Parámetros de paginación
+        page = int(request.args.get('page', 1))
+        per_page = int(request.args.get('per_page', 10))
+        offset = (page - 1) * per_page
+        
+        # Parámetros de ordenamiento
+        sort_by = request.args.get('sort_by', 'id')
+        order = request.args.get('order', 'asc').upper()
+        if order not in ['ASC', 'DESC']:
+            order = 'ASC'
+
+        # Construcción dinámica de la consulta
+        base_query = "SELECT * FROM locations"
+        conditions = []
+        params = []
+        
+        # Filtros
+        if search_query:
+            search_pattern = f"%{search_query}%"
+            conditions.append(
+                "(LOWER(place_name) LIKE %s OR "
+                "LOWER(country) LIKE %s OR "
+                "LOWER(province) LIKE %s)"
+            )
+            params.extend([search_pattern]*3)
+        
+        if country:
+            conditions.append("LOWER(country) = %s")
+            params.append(country)
+            
+        if province:
+            conditions.append("LOWER(province) = %s")
+            params.append(province)
+            
+        if place_name:
+            conditions.append("LOWER(place_name) LIKE %s")
+            params.append(f"%{place_name}%")
+
+        # Ensamblar consulta
+        if conditions:
+            base_query += " WHERE " + " AND ".join(conditions)
+            
+        # Ordenamiento
+        base_query += f" ORDER BY {sort_by} {order}"
+        
+        # Paginación
+        base_query += " LIMIT %s OFFSET %s"
+        params.extend([per_page, offset])
+
+        # Ejecutar consulta
+        cursor.execute(base_query, params)
         locations = cursor.fetchall()
+        
+        # Obtener total para paginación
+        count_query = "SELECT COUNT(*) FROM locations"
+        if conditions:
+            count_query += " WHERE " + " AND ".join(conditions)
+        cursor.execute(count_query, params[:-2])  # Excluir LIMIT y OFFSET
+        total = cursor.fetchone()[0]
 
-        if not locations:
-            logging.warning("⚠️ No hay localizaciones disponibles en la BD")
-            return jsonify({"message": "No hay localizaciones disponibles"}), 404
+        return jsonify({
+            "locations": [dict(row) for row in locations],
+            "pagination": {
+                "total": total,
+                "page": page,
+                "per_page": per_page,
+                "total_pages": (total + per_page - 1) // per_page
+            }
+        }), 200
 
-        # Convertir cada fila en un diccionario y devolver un array
-        locations_list = [dict(row) for row in locations]
-        return jsonify({"locations": locations_list}), 200
-    
-    except Exception as e: 
-        logging.error(f"Error al obtener localizaciones: {e}")
-        return jsonify({"message": "Error al obtener las localizaciones"}), 500
+    except Exception as e:
+        logging.error(f"Error: {str(e)}")
+        return jsonify({"message": "Error al obtener localizaciones"}), 500
     finally:
         cursor.close()
         connection.close()
