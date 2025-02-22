@@ -140,7 +140,7 @@ def login():
         cursor.close()
         connection.close()
 
-@app.route('/activities', methods=['POST', 'GET'])
+@app.route('/activities', methods=['POST'])
 def create_activity():
     connection = get_db_connection()
     if not connection:
@@ -178,29 +178,47 @@ def create_activity():
                 body.get("is_public", True), cost, body.get("activity_image_url")
             ))
 
-            activity_id = cursor.fetchone()[0]  # Obtenemos el id de la actividad recién insertada
+            activity_id = cursor.fetchone()["id"]  # Obtenemos el id de la actividad recién insertada
             connection.commit()
 
             return jsonify({
                 "message": "Actividad creada correctamente",
                 "activity_id": activity_id
             }), 201
-
-        elif request.method == 'GET':
-            cursor.execute("SELECT * FROM activities")
-            activities = cursor.fetchall()
-
-            if not activities:
-                return jsonify({"message": "No hay actividades disponibles"}), 404
-
-            return jsonify({"activities": activities}), 200
-
+    
+    except psycopg2.IntegrityError as e:
+        logging.error(f"Error al crear la actividad: {e}")
+        return jsonify({"message": "Error al crear la actividad"}), 400
+    
     except Exception as e:
-        logging.error(f"Error al crear o consultar la actividad: {e}")
-        return jsonify({"message": f"Error en el servidor: {str(e)}"}), 500
+        logging.error(f"Error al crear la actividad: {e}")
+        return jsonify({"message": "Error al crear la actividad"}), 500
     finally:
         cursor.close()
         connection.close()
+            
+@app.route('/activities', methods=['GET'])
+def get_all_activities():
+    connection = get_db_connection()
+    if not connection:
+        return jsonify({"message": "Error de conexión con la base de datos"}), 500
+
+    cursor = connection.cursor(cursor_factory=RealDictCursor)
+    try:
+        cursor.execute("SELECT * FROM activities")
+        activities = cursor.fetchall()
+
+        if not activities:
+            return jsonify({"message": "No hay actividades disponibles"}), 404
+
+        return jsonify({"activities": activities}), 200
+    except Exception as e:
+        logging.error(f"Error al obtener actividades: {e}")
+        return jsonify({"message": "Error interno del servidor"}), 500
+    finally:
+        cursor.close()
+        connection.close()
+            
 @app.route('/activity_trips', methods=['POST'])
 def associate_activity_trip():
     """Asocia una actividad a un viaje"""
