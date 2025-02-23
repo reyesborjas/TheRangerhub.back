@@ -397,31 +397,34 @@ def get_rangers():
     if not connection:
         return jsonify({"message": "Error de conexión con la base de datos"}), 500
 
-    cursor = connection.cursor()
+    cursor = connection.cursor(cursor_factory=RealDictCursor)  # Usar RealDictCursor para obtener diccionarios
     try:
-        ranger_role_id = uuid.UUID('8f285ee6-7ded-473d-8c57-5159a489e7e6')
+        # Obtener role_id dinámicamente
+        cursor.execute("SELECT id FROM user_roles WHERE role_name = 'Ranger'")
+        role = cursor.fetchone()
+        
+        if not role:
+            return jsonify({"message": "Rol Ranger no encontrado"}), 404
 
+        # Query optimizada
         cursor.execute("""
-            SELECT first_name, last_name, username 
+            SELECT id, first_name, last_name, username 
             FROM users 
-            WHERE role_id = %s::uuid
-        """, (str(ranger_role_id),))
+            WHERE role_id = %s
+        """, (role['id'],))  # Usar parámetro obtenido dinámicamente
 
         rangers = cursor.fetchall()
-
-        if not rangers:
-            return jsonify({"message": "No hay rangers disponibles"}), 404
-
-        formatted_rangers = [
-            {"full_name": f"{r['first_name']} {r['last_name']} ({r['username']})"}
-            for r in rangers
-        ]
-
-        return jsonify({"rangers": formatted_rangers}), 200
+        return jsonify({
+            "rangers": [{
+                "uuid": r['id'],
+                "full_name": f"{r['first_name']} {r['last_name']}",
+                "username": r['username']
+            } for r in rangers]
+        }), 200
 
     except Exception as e:
-        logging.error(f"Error al obtener rangers: {e}")
-        return jsonify({"message": "Error al obtener los rangers"}), 500
+        logging.error(f"Error al obtener rangers: {str(e)}")
+        return jsonify({"message": "Error interno del servidor"}), 500
     finally:
         cursor.close()
         connection.close()
