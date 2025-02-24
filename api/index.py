@@ -401,29 +401,30 @@ def get_rangers():
     try:
         cursor = connection.cursor(cursor_factory=RealDictCursor)
         
-        
+        # 1. Obtener ID del rol Ranger
         cursor.execute("SELECT id FROM user_roles WHERE role_name = 'Ranger'")
         role = cursor.fetchone()
         
-        if not role:
+        if not role or 'id' not in role:
             return jsonify({"error": "Rol Ranger no configurado"}), 404
 
+        # 2. Query corregida
         cursor.execute("""
             SELECT id, first_name, last_name, username 
             FROM users 
             WHERE role_id = %s
-            AND user_status = 'activo'  # Filtro adicional
-        """, (role['id'],))  # ¡Usar parámetro sin casteo a UUID!
+            AND user_status = 'activo'  -- Filtro adicional
+        """, (role['id'],))
 
         # 3. Formatear respuesta
+        rangers = cursor.fetchall()
         return jsonify({
             "rangers": [
                 {
-                    "id": str(r['id']),  # Asegurar string
+                    "id": str(r['id']),
                     "full_name": f"{r['first_name']} {r['last_name']}",
                     "username": r['username']
-                } 
-                for r in cursor.fetchall()
+                } for r in rangers
             ]
         }), 200
 
@@ -431,8 +432,8 @@ def get_rangers():
         logging.error(f"Error en /rangers: {str(e)}")
         return jsonify({"error": "Error interno al obtener rangers"}), 500
     finally:
-        cursor.close() if 'cursor' in locals() else None
-        connection.close() if connection else None
+        if 'cursor' in locals(): cursor.close()
+        if connection: connection.close()
         
 @app.route('/trips', methods=['GET'])  
 def get_trips():
