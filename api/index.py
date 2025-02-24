@@ -393,29 +393,43 @@ def create_trip():
 
 @app.route('/rangers', methods=['GET'])
 def get_rangers():
-    # ... (conexión y cursor)
+    connection = get_db_connection()
+    if not connection:
+        return jsonify({"message": "Error de conexión con la base de datos"}), 500
+
+    cursor = connection.cursor(cursor_factory=RealDictCursor)
     try:
+        # Obtener role_id dinámicamente
+        cursor.execute("SELECT id FROM user_roles WHERE role_name = 'Ranger'")
+        role = cursor.fetchone()
+        
+        if not role:
+            return jsonify({"message": "Rol Ranger no encontrado"}), 404
+
+        # Query optimizada incluyendo username
         cursor.execute("""
             SELECT id, first_name, last_name, username 
             FROM users 
-            WHERE role_id = %s::uuid
-        """, (str(ranger_role_id),))
+            WHERE role_id = %s
+        """, (role['id'],))
 
         rangers = cursor.fetchall()
+        return jsonify({
+            "rangers": [
+                {
+                    "id": r['id'],
+                    "full_name": f"{r['first_name']} {r['last_name']}",
+                    "username": r['username']
+                } for r in rangers
+            ]
+        }), 200
 
-        formatted_rangers = [
-            {
-                "id": r['id'],
-                "full_name": f"{r['first_name']} {r['last_name']}",
-                "username": r['username']  # ✅ Campo separado
-            }
-            for r in rangers
-        ]
-
-        return jsonify({"rangers": formatted_rangers}), 200
     except Exception as e:
-        # ... (manejo de excepciones)
-        return jsonify({"message": "Error al obtener rangers"}), 500
+        logging.error(f"Error al obtener rangers: {str(e)}")
+        return jsonify({"message": "Error interno del servidor"}), 500
+    finally:
+        cursor.close()
+        connection.close()
         
 @app.route('/trips', methods=['GET'])  
 def get_trips():
