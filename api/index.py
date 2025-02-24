@@ -219,40 +219,72 @@ def get_all_activities():
         cursor.close()
         connection.close()
             
-@app.route('/activity-trips', methods=['POST'])  # Cambiado a guión normal
+@app.route('/activity-trips', methods=['POST'])
 def associate_activity_trip():
-    connection = get_db_connection()
-    if not connection:
-        return jsonify({"message": "Error de conexión con la base de datos"}), 500
-
-    cursor = connection.cursor()
     try:
         body = request.get_json()
-
-        # Validar existencia previa
-        cursor.execute("""
-            SELECT * FROM activity_trips 
-            WHERE activity_id = %s AND trip_id = %s
-        """, (body["activity_id"], body["trip_id"]))
         
-        if cursor.fetchone():
-            return jsonify({"message": "La actividad ya está asociada al viaje"}), 400
-
-        # Insertar nueva relación
-        cursor.execute("""
-            INSERT INTO activity_trips (activity_id, trip_id)
-            VALUES (%s, %s)
-        """, (body["activity_id"], body["trip_id"]))
-
-        connection.commit()
-        return jsonify({"message": "Actividad asociada al viaje correctamente"}), 201
-
+        # Validar presencia de campos
+        if 'activity_id' not in body or 'trip_id' not in body:
+            return jsonify({"message": "Faltan campos requeridos: activity_id o trip_id"}), 400
+        
+        # Validar formato UUID
+        try:
+            activity_id = uuid.UUID(body["activity_id"])
+            trip_id = uuid.UUID(body["trip_id"])
+        except ValueError:
+            return jsonify({"message": "Formato de UUID inválido"}), 400
+        
+        # Obtener conexión
+        connection = get_db_connection()
+        if not connection:
+            return jsonify({"message": "Error de conexión con la base de datos"}), 500
+            
+        cursor = connection.cursor()
+        
+        try:
+            # Verificar existencia de los IDs en sus tablas
+            cursor.execute("SELECT 1 FROM activities WHERE id = %s", (str(activity_id),))
+            if not cursor.fetchone():
+                return jsonify({"message": "La actividad no existe"}), 404
+                
+            cursor.execute("SELECT 1 FROM trips WHERE id = %s", (str(trip_id),))
+            if not cursor.fetchone():
+                return jsonify({"message": "El viaje no existe"}), 404
+            
+            # Verificar relación existente
+            cursor.execute("""
+                SELECT 1 FROM activity_trips 
+                WHERE activity_id = %s AND trip_id = %s
+            """, (str(activity_id), str(trip_id)))
+            
+            if cursor.fetchone():
+                return jsonify({"message": "La relación ya existe"}), 409
+                
+            # Insertar nueva relación
+            cursor.execute("""
+                INSERT INTO activity_trips (activity_id, trip_id)
+                VALUES (%s, %s)
+            """, (str(activity_id), str(trip_id)))
+            
+            connection.commit()
+            return jsonify({"message": "Relación creada exitosamente"}), 201
+            
+        except psycopg2.IntegrityError as e:
+            logging.error(f"Error de integridad: {str(e)}")
+            return jsonify({"message": "Error en relaciones de base de datos"}), 400
+            
+        except Exception as e:
+            logging.error(f"Error interno: {str(e)}")
+            return jsonify({"message": "Error del servidor"}), 500
+            
+        finally:
+            cursor.close()
+            connection.close()
+            
     except Exception as e:
-        logging.error(f"Error al asociar actividad y viaje: {str(e)}")
-        return jsonify({"message": "Error al asociar actividad y viaje"}), 500
-    finally:
-        cursor.close()
-        connection.close()
+        logging.error(f"Error general: {str(e)}")
+        return jsonify({"message": "Error procesando la solicitud"}), 500
 
 @app.route('/activitycategory', methods=['GET'])  
 def get_activity_categories():  
@@ -406,7 +438,8 @@ def create_trip():
             body["lead_ranger"]  # Campo crítico
         ))
 
-        trip_id = cursor.fetchone()[0]
+        trip_row = cursor.fetchone()
+        trip_id = trip_row["id"]
         connection.commit()
         
         return jsonify({
