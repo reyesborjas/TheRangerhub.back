@@ -219,9 +219,8 @@ def get_all_activities():
         cursor.close()
         connection.close()
             
-@app.route('/activity_trips', methods=['POST'])
+@app.route('/activity-trips', methods=['POST'])  # Cambiado a guión normal
 def associate_activity_trip():
-    """Asocia una actividad a un viaje"""
     connection = get_db_connection()
     if not connection:
         return jsonify({"message": "Error de conexión con la base de datos"}), 500
@@ -229,9 +228,17 @@ def associate_activity_trip():
     cursor = connection.cursor()
     try:
         body = request.get_json()
-        print("Datos recibidos para asociar actividad y viaje:", body)
 
-        # Inserción en la tabla activity_trips
+        # Validar existencia previa
+        cursor.execute("""
+            SELECT * FROM activity_trips 
+            WHERE activity_id = %s AND trip_id = %s
+        """, (body["activity_id"], body["trip_id"]))
+        
+        if cursor.fetchone():
+            return jsonify({"message": "La actividad ya está asociada al viaje"}), 400
+
+        # Insertar nueva relación
         cursor.execute("""
             INSERT INTO activity_trips (activity_id, trip_id)
             VALUES (%s, %s)
@@ -241,7 +248,7 @@ def associate_activity_trip():
         return jsonify({"message": "Actividad asociada al viaje correctamente"}), 201
 
     except Exception as e:
-        logging.error(f"Error al asociar actividad y viaje: {e}")
+        logging.error(f"Error al asociar actividad y viaje: {str(e)}")
         return jsonify({"message": "Error al asociar actividad y viaje"}), 500
     finally:
         cursor.close()
@@ -363,7 +370,6 @@ def get_locations():
 
 @app.route('/trips', methods=['POST'])
 def create_trip():
-    """Crea un nuevo viaje"""
     connection = get_db_connection()
     if not connection:
         return jsonify({"message": "Error de conexión con la base de datos"}), 500
@@ -372,15 +378,23 @@ def create_trip():
     try:
         body = request.get_json()
 
+        # Validar que lead_ranger existe
+        if 'lead_ranger' not in body:
+            return jsonify({"message": "Falta el Ranger líder"}), 400
+
         cursor.execute("""
             INSERT INTO trips (
                 trip_name, description, start_date, end_date, trip_status, 
-                participants_number, estimated_weather_forecast, total_cost, trip_image_url
+                participants_number, estimated_weather_forecast, total_cost, 
+                trip_image_url, lead_ranger  <!-- Campo añadido -->
             ) 
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
-        """, (body["trip_name"], body["description"], body["start_date"], body["end_date"], 
-              body["trip_status"], body["participants_number"], body["estimated_weather_forecast"], 
-              body["total_cost"], body["trip_image_url"]))
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)  <!-- Un parámetro extra -->
+        """, (
+            body["trip_name"], body["description"], body["start_date"], 
+            body["end_date"], body["trip_status"], body["participants_number"], 
+            body["estimated_weather_forecast"], body["total_cost"], 
+            body["trip_image_url"], body["lead_ranger"]  <!-- Valor añadido -->
+        ))
 
         connection.commit()
         return jsonify({"message": "Viaje creado correctamente"}), 201
@@ -390,7 +404,6 @@ def create_trip():
     finally:
         cursor.close()
         connection.close()
-
 
 @app.route('/rangers', methods=['GET'])
 def get_rangers():
