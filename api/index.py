@@ -377,34 +377,50 @@ def create_trip():
     cursor = connection.cursor()
     try:
         body = request.get_json()
+        
+        # Validar campos requeridos
+        required_fields = ['trip_name', 'lead_ranger', 'start_date', 'end_date']
+        for field in required_fields:
+            if field not in body:
+                return jsonify({"message": f"Campo requerido faltante: {field}"}), 400
 
-        # Validar que lead_ranger existe
-        if 'lead_ranger' not in body:
-            return jsonify({"message": "Falta el Ranger líder"}), 400
-
+        # Insertar con todos los campos correctos
         cursor.execute("""
             INSERT INTO trips (
-                trip_name, description, start_date, end_date, trip_status, 
-                participants_number, estimated_weather_forecast, total_cost, 
-                trip_image_url, lead_ranger  <!-- Campo añadido -->
+                trip_name, start_date, end_date, participants_number,
+                trip_status, estimated_weather_forecast, description,
+                total_cost, trip_image_url, lead_ranger
             ) 
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)  <!-- Un parámetro extra -->
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            RETURNING id
         """, (
-            body["trip_name"], body["description"], body["start_date"], 
-            body["end_date"], body["trip_status"], body["participants_number"], 
-            body["estimated_weather_forecast"], body["total_cost"], 
-            body["trip_image_url"], body["lead_ranger"]  <!-- Valor añadido -->
+            body.get("trip_name"),
+            body.get("start_date"),
+            body.get("end_date"),
+            body.get("participants_number", 0),
+            body.get("trip_status", "pending"),
+            body.get("estimated_weather_forecast", ""),
+            body.get("description", ""),
+            body.get("total_cost", 0),
+            body.get("trip_image_url", ""),
+            body["lead_ranger"]  # Campo crítico
         ))
 
+        trip_id = cursor.fetchone()[0]
         connection.commit()
-        return jsonify({"message": "Viaje creado correctamente"}), 201
+        
+        return jsonify({
+            "message": "Viaje creado exitosamente",
+            "id": str(trip_id)
+        }), 201
+
     except Exception as e:
-        logging.error(f"Error al crear el viaje: {e}")
-        return jsonify({"message": "Error al crear el viaje"}), 500
+        logging.error(f"Error en creación de viaje: {str(e)}")
+        return jsonify({"message": "Error interno del servidor"}), 500
     finally:
         cursor.close()
         connection.close()
-
+        
 @app.route('/rangers', methods=['GET'])
 def get_rangers():
     connection = get_db_connection()
