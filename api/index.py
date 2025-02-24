@@ -391,45 +391,48 @@ def create_trip():
         cursor.close()
         connection.close()
 
+
 @app.route('/rangers', methods=['GET'])
 def get_rangers():
     connection = get_db_connection()
     if not connection:
-        return jsonify({"message": "Error de conexión con la base de datos"}), 500
+        return jsonify({"error": "Database connection failed"}), 500
 
-    cursor = connection.cursor(cursor_factory=RealDictCursor)
     try:
-        # Obtener role_id dinámicamente
+        cursor = connection.cursor(cursor_factory=RealDictCursor)
+        
+        
         cursor.execute("SELECT id FROM user_roles WHERE role_name = 'Ranger'")
         role = cursor.fetchone()
         
         if not role:
-            return jsonify({"message": "Rol Ranger no encontrado"}), 404
+            return jsonify({"error": "Rol Ranger no configurado"}), 404
 
-        # Query optimizada incluyendo username
         cursor.execute("""
             SELECT id, first_name, last_name, username 
             FROM users 
             WHERE role_id = %s
-        """, (role['id'],))
+            AND user_status = 'activo'  # Filtro adicional
+        """, (role['id'],))  # ¡Usar parámetro sin casteo a UUID!
 
-        rangers = cursor.fetchall()
+        # 3. Formatear respuesta
         return jsonify({
             "rangers": [
                 {
-                    "id": r['id'],
+                    "id": str(r['id']),  # Asegurar string
                     "full_name": f"{r['first_name']} {r['last_name']}",
                     "username": r['username']
-                } for r in rangers
+                } 
+                for r in cursor.fetchall()
             ]
         }), 200
 
     except Exception as e:
-        logging.error(f"Error al obtener rangers: {str(e)}")
-        return jsonify({"message": "Error interno del servidor"}), 500
+        logging.error(f"Error en /rangers: {str(e)}")
+        return jsonify({"error": "Error interno al obtener rangers"}), 500
     finally:
-        cursor.close()
-        connection.close()
+        cursor.close() if 'cursor' in locals() else None
+        connection.close() if connection else None
         
 @app.route('/trips', methods=['GET'])  
 def get_trips():
