@@ -108,6 +108,12 @@ CREATE TABLE activity_trips (
    trip_id uuid NOT NULL REFERENCES trips(id) ON DELETE CASCADE
 );
 
+CREATE TABLE user_trips (
+   id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+   user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+   trip_id uuid NOT NULL REFERENCES trips(id) ON DELETE CASCADE
+);
+
 CREATE TABLE resources (
    id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
    name varchar(100) NOT NULL UNIQUE,
