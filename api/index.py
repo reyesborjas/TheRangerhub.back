@@ -129,7 +129,11 @@ def login():
                 "exp": datetime.datetime.utcnow() + datetime.timedelta(hours=2)
             }, SECRET_KEY, algorithm="HS256")
 
-            return jsonify({"message": "Login exitoso", "token": token}), 200
+            return jsonify({
+            "message": "Login exitoso", 
+            "token": token,
+            "username": user["username"]  
+        }), 200
         else:
             return jsonify({"message": "Credenciales incorrectas"}), 401
 
