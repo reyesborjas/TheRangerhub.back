@@ -439,7 +439,7 @@ def create_trip():
             body.get("description", ""),
             body.get("total_cost", 0),
             body.get("trip_image_url", ""),
-            body["lead_ranger"]  # Campo crítico
+            body["lead_ranger"]  
         ))
 
         trip_row = cursor.fetchone()
@@ -542,6 +542,50 @@ def get_resources():
         logging.error(f"Error al obtener recursos: {e}")  
         return jsonify({"message": "Error al obtener los recursos"}), 500  
     finally:  
+        cursor.close()
+        connection.close()
+@app.route('/reservations', methods=['POST'])
+def create_reservation():
+    connection = get_db_connection()
+    if not connection:
+        return jsonify({"message": "Error de conexión con la base de datos"}), 500
+
+    cursor = connection.cursor()
+    try:
+        body = request.get_json()
+        
+        # Validar campos requeridos
+        required_fields = ['trip_id', 'user_id', 'reservation_date', 'status']
+        for field in required_fields:
+            if field not in body:
+                return jsonify({"message": f"Campo requerido faltante: {field}"}), 400
+
+        # Insertar con todos los campos correctos
+        cursor.execute("""
+            INSERT INTO reservations (
+                trip_id, user_id, status
+            ) 
+            VALUES (%s, %s, %s)
+            RETURNING id
+        """, (
+            body.get("trip_id"),
+            body.get("user_id"),
+            body.get("status")
+        ))
+
+        reservation_row = cursor.fetchone()
+        reservation_id = reservation_row["id"]
+        connection.commit()
+        
+        return jsonify({
+            "message": "Reserva creada exitosamente",
+            "id": str(reservation_id)
+        }), 201
+
+    except Exception as e:
+        logging.error(f"Error en creación de reserva: {str(e)}")
+        return jsonify({"message": "Error interno del servidor"}), 500
+    finally:
         cursor.close()
         connection.close()
 
