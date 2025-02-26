@@ -588,6 +588,47 @@ def create_reservation():
     finally:
         cursor.close()
         connection.close()
+        
+@app.route('/usertrips', methods=['GET'])  
+def get_usertrips():
+    connection = get_db_connection()  
+    if not connection:  
+        return jsonify({"message": "Error de conexión con la base de datos"}), 500  
+
+    cursor = connection.cursor()
+    try:
+        
+        lead_ranger = request.args.get('lead_ranger')
+        trip_ids = request.args.getlist('trip_ids')  # Para múltiples IDs
+        
+        base_query = "SELECT * FROM trips"
+        conditions = []
+        params = []
+        
+        # Filtro para Ranger
+        if lead_ranger:
+            conditions.append("lead_ranger = %s")
+            params.append(lead_ranger)
+        
+        # Filtro para IDs de viajes (Explorers)
+        if trip_ids:
+            conditions.append("id = ANY(%s)")
+            params.append(trip_ids)
+        
+        # Construir consulta final
+        if conditions:
+            base_query += " WHERE " + " AND ".join(conditions)
+            
+        cursor.execute(base_query, params)
+        trips = cursor.fetchall()
+
+        return jsonify({"trips": trips}), 200
+    except Exception as e:  
+        logging.error(f"Error al obtener viajes: {e}")  
+        return jsonify({"message": "Error al obtener los viajes"}), 500  
+    finally:  
+        cursor.close()
+        connection.close()
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", debug=True, port=5000)
