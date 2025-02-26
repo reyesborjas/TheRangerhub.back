@@ -116,9 +116,15 @@ def login():
             return jsonify({"message": "Debe ingresar usuario y contraseña"}), 400
        
         hashed_password = hash_password(password)  # Hashear la contraseña ingresada
+
+        cursor.execute(
+            """SELECT users.id, users.username, users.role_id, user_roles.role_name, users.password FROM users 
+               inner join 
+               user_roles
+               on users.role_id = user_roles.id WHERE users.username = %s     
+            """
+        ,(username,))
        
-        cursor.execute("SELECT id, username, role_id, password FROM users WHERE username = %s", 
-                       (username,))
         user = cursor.fetchone()
         
         if user and user["password"] == hashed_password:
@@ -126,18 +132,21 @@ def login():
                 "user_id": user["id"],
                 "username": user["username"],
                 "role_id": user["role_id"],
+                'role_name': user['role_name'],
                 "exp": datetime.datetime.utcnow() + datetime.timedelta(hours=2)
             }, SECRET_KEY, algorithm="HS256")
 
             return jsonify({
-            "message": "Login exitoso", 
-            "token": token,
-            "username": user["username"],
-            "user": {
-        "id": user["id"],
-        "username": user["username"],
-        "role_id": user["role_id"]}
-        }), 200
+                "message": "Login exitoso", 
+                "token": token,
+                "username": user["username"],
+                "user": {
+                    "id": user["id"],
+                    "username": user["username"],
+                    "role_id": user["role_id"],
+                    "role_name": user['role_name'],
+                }
+            }), 200
         else:
             return jsonify({"message": "Credenciales incorrectas"}), 401
 
