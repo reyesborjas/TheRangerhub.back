@@ -644,5 +644,27 @@ def get_explorer_trips(user_id):
         cursor.close()
         connection.close()
 
+@app.route('/reservations', methods=['GET'])
+def get_reservations():
+    connection = get_db_connection()
+    if not connection:
+        return jsonify({"message": "Error de conexión con la base de datos"}), 500
+
+    cursor = connection.cursor()
+    try:
+        cursor.execute("SELECT * FROM reservations")
+        reservations = cursor.fetchall()
+
+        if not reservations:
+            return jsonify({"message": "No hay reservas disponibles"}), 404
+
+        return jsonify({"reservations": reservations}), 200
+    except Exception as e:
+        logging.error(f"Error al obtener reservas: {e}")
+        return jsonify({"message": "Error al obtener las reservas"}), 500
+    finally:
+        cursor.close()
+        connection.close()
+
 if __name__ == "__main__":
     app.run(host="0.0.0.0", debug=True, port=5000)
