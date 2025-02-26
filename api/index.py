@@ -132,7 +132,11 @@ def login():
             return jsonify({
             "message": "Login exitoso", 
             "token": token,
-            "username": user["username"]  
+            "username": user["username"],
+            "user": {
+        "id": user["id"],
+        "username": user["username"],
+        "role_id": user["role_id"]}
         }), 200
         else:
             return jsonify({"message": "Credenciales incorrectas"}), 401
