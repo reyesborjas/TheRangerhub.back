@@ -653,28 +653,58 @@ def get_explorer_trips(user_id):
         cursor.close()
         connection.close()
 
-@app.route('/reservations', methods=['GET'])
-def get_reservations():
+@app.route('/reservations/explorer/<uuid:user_id>', methods=['GET'])
+def get_reservations_explorer(user_id):
+
     connection = get_db_connection()
     if not connection:
         return jsonify({"message": "Error de conexión con la base de datos"}), 500
 
     cursor = connection.cursor()
     try:
-        cursor.execute("SELECT * FROM reservations")
-        reservations = cursor.fetchall()
+        cursor.execute(""" 
+            SELECT * FROM reservations inner join
+            trips 
+            on reservations.trip_id = trips.id
+            where reservations.user_id = %s
+        """, (str(user_id),))
+        trips = cursor.fetchall()
 
-        if not reservations:
+        if not trips:
             return jsonify({"message": "No hay reservas disponibles"}), 404
 
-        return jsonify({"reservations": reservations}), 200
+        return jsonify({"trips": trips}), 200
     except Exception as e:
         logging.error(f"Error al obtener reservas: {e}")
         return jsonify({"message": "Error al obtener las reservas"}), 500
     finally:
         cursor.close()
         connection.close()
-        
+
+@app.route('/reservations/ranger/<uuid:user_id>', methods=['GET'])
+def get_reservations_ranger(user_id):
+    connection = get_db_connection()
+    if not connection:
+        return jsonify({"message": "Error de conexión con la base de datos"}), 500
+
+    cursor = connection.cursor()
+    try:
+        cursor.execute(""" 
+           select * from trips where trips.lead_ranger = %s
+        """, (str(user_id),))
+        trips = cursor.fetchall()
+
+        if not trips:
+            return jsonify({"message": "No hay reservas disponibles"}), 404
+
+        return jsonify({"trips": trips}), 200
+    except Exception as e:
+        logging.error(f"Error al obtener reservas: {e}")
+        return jsonify({"message": "Error al obtener las reservas"}), 500
+    finally:
+        cursor.close()
+        connection.close()      
+
 import uuid  # Importar módulo para trabajar con UUIDs
 
 @app.route('/reservations/user/<user_id>', methods=['GET'])
