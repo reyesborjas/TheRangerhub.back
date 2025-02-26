@@ -665,6 +665,40 @@ def get_reservations():
     finally:
         cursor.close()
         connection.close()
+        
+import uuid  # Importar módulo para trabajar con UUIDs
+
+@app.route('/reservations/user/<user_id>', methods=['GET'])
+def get_reservations_by_user(user_id):
+    connection = get_db_connection()
+    if not connection:
+        return jsonify({"message": "Error de conexión con la base de datos"}), 500
+
+    cursor = connection.cursor(dictionary=True)  # Habilita la conversión de filas a diccionarios
+    try:
+        # Convertir el user_id a UUID (manejar error si el formato es incorrecto)
+        try:
+            user_uuid = uuid.UUID(user_id)
+        except ValueError:
+            return jsonify({"message": "Formato de UUID inválido"}), 400
+
+        # Consulta SQL con UUID
+        cursor.execute("SELECT * FROM reservations WHERE user_id = %s", (str(user_uuid),))
+        reservations = cursor.fetchall()
+
+        if not reservations:
+            return jsonify({"message": "No se encontraron reservas para este usuario"}), 404
+
+        return jsonify({"reservations": reservations}), 200
+
+    except Exception as e:
+        logging.error(f"Error al obtener reservas: {str(e)}")
+        return jsonify({"message": "Error interno del servidor"}), 500
+    finally:
+        cursor.close()
+        connection.close()
+
+
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", debug=True, port=5000)
