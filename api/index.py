@@ -548,6 +548,7 @@ def get_resources():
     finally:  
         cursor.close()
         connection.close()
+        
 @app.route('/reservations', methods=['POST'])
 def create_reservation():
     connection = get_db_connection()
@@ -559,7 +560,7 @@ def create_reservation():
         body = request.get_json()
         
         # Validar campos requeridos
-        required_fields = ['trip_id', 'user_id', 'reservation_date', 'status']
+        required_fields = ['trip_id', 'user_id','status']
         for field in required_fields:
             if field not in body:
                 return jsonify({"message": f"Campo requerido faltante: {field}"}), 400
