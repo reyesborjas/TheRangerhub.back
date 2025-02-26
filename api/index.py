@@ -589,44 +589,53 @@ def create_reservation():
         cursor.close()
         connection.close()
         
-@app.route('/usertrips', methods=['GET'])  
-def get_usertrips():
-    connection = get_db_connection()  
-    if not connection:  
-        return jsonify({"message": "Error de conexión con la base de datos"}), 500  
-
-    cursor = connection.cursor()
+# Endpoint para Rangers
+@app.route('/trips/ranger/<uuid:user_id>', methods=['GET'])
+def get_ranger_trips(user_id):
+    connection = get_db_connection()
     try:
-        
-        lead_ranger = request.args.get('lead_ranger')
-        trip_ids = request.args.getlist('trip_ids')  # Para múltiples IDs
-        
-        base_query = "SELECT * FROM trips"
-        conditions = []
-        params = []
-        
-        # Filtro para Ranger
-        if lead_ranger:
-            conditions.append("lead_ranger = %s")
-            params.append(lead_ranger)
-        
-        # Filtro para IDs de viajes (Explorers)
-        if trip_ids:
-            conditions.append("id = ANY(%s)")
-            params.append(trip_ids)
-        
-        # Construir consulta final
-        if conditions:
-            base_query += " WHERE " + " AND ".join(conditions)
-            
-        cursor.execute(base_query, params)
+        cursor = connection.cursor()
+        cursor.execute("""
+            SELECT * FROM trips 
+            WHERE lead_ranger = %s::uuid
+        """, (str(user_id),))
         trips = cursor.fetchall()
+        return jsonify({"trips": trips}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        cursor.close()
+        connection.close()
+
+# Endpoint para Explorers
+@app.route('/trips/explorer/<uuid:user_id>', methods=['GET'])
+def get_explorer_trips(user_id):
+    connection = get_db_connection()
+    try:
+        cursor = connection.cursor()
+        
+        # Paso 1: Obtener reservas del usuario
+        cursor.execute("""
+            SELECT trip_id FROM reservations 
+            WHERE user_id = %s::uuid
+        """, (str(user_id),))
+        reservations = cursor.fetchall()
+        trip_ids = [str(r['trip_id']) for r in reservations]
+
+        # Paso 2: Obtener viajes relacionados
+        if trip_ids:
+            cursor.execute("""
+                SELECT * FROM trips 
+                WHERE id::text = ANY(%s)
+            """, (trip_ids,))
+            trips = cursor.fetchall()
+        else:
+            trips = []
 
         return jsonify({"trips": trips}), 200
-    except Exception as e:  
-        logging.error(f"Error al obtener viajes: {e}")  
-        return jsonify({"message": "Error al obtener los viajes"}), 500  
-    finally:  
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
         cursor.close()
         connection.close()
 
