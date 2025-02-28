@@ -602,6 +602,24 @@ def create_reservation():
     finally:
         cursor.close()
         connection.close()
+
+@app.route('/reservations/<string:reservation_id>', methods=['DELETE'])
+def delete_reservation(reservation_id):
+    connection = get_db_connection()  // Corregido el nombre de la variable
+    if not connection:
+        return jsonify({"message": "Error de conexión con la base de datos"}), 500
+    cursor = connection.cursor()
+    try:
+        cursor.execute("DELETE FROM reservations WHERE id = %s", (reservation_id,))
+        connection.commit()
+        return jsonify({"message": "Reserva eliminada correctamente"}), 200
+    except Exception as e:
+        logging.error(f"Error al eliminar la reserva: {str(e)}")
+        return jsonify({"message": "Error interno del servidor"}), 500
+    finally:
+        cursor.close()
+        connection.close()
+
         
 # Endpoint para Rangers
 @app.route('/trips/ranger/<uuid:user_id>', methods=['GET'])
