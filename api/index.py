@@ -89,7 +89,7 @@ def get_roles():
 
     cursor = connection.cursor()
     try:
-        cursor.execute("SELECT * FROM user_roles")
+        cursor.execute("SELECT * FROM user_roles where role_name != 'Admin'")
         roles = cursor.fetchall()
         if not roles:
             return jsonify({"message": "No hay roles disponibles"}), 404
@@ -604,25 +604,6 @@ def create_reservation():
         cursor.close()
         connection.close()
 
-@app.route('/reservations/<string:reservation_id>', methods=['DELETE'])
-def delete_reservation(reservation_id):
-    print(f"Intentando eliminar reserva con ID: {reservation_id}")  # Debugging
-    connection = get_db_connection()
-    if not connection:
-        return jsonify({"message": "Error de conexión con la base de datos"}), 500
-    cursor = connection.cursor()
-    try:
-        cursor.execute("DELETE FROM reservations WHERE id = %s", (reservation_id,))
-        if cursor.rowcount == 0: 
-            return jsonify({"message": "Reserva no encontrada"}), 404
-        connection.commit()
-        return jsonify({"message": "Reserva eliminada correctamente"}), 200
-    except Exception as e:
-        logging.error(f"Error al eliminar la reserva: {str(e)}")
-        return jsonify({"message": "Error interno del servidor"}), 500
-    finally:
-        cursor.close()
-        connection.close()
 
 
         
@@ -645,7 +626,7 @@ def get_ranger_trips(user_id):
         connection.close()
 
 # Endpoint para Explorers
-@app.route('/reservations/explorer/<string:user_id>', methods=['GET'])
+'''@app.route('/reservations/explorer/<string:user_id>', methods=['GET'])
 
 def get_explorer_trips(user_id):
     connection = get_db_connection()
@@ -685,35 +666,36 @@ def get_explorer_trips(user_id):
         return jsonify({"error": str(e)}), 500
     finally:
         cursor.close()
-        connection.close()
-
-''' @app.route('/reservations/explorer/<uuid:user_id>', methods=['GET'])
-def get_reservations_explorer(user_id):
-
+        connection.close()'''
+        
+@app.route('/reservations/explorer/<uid:user_id>/<uuid:trip_id>', methods=['DELETE'])
+def cancel_reservation(user_id, trip_id):
     connection = get_db_connection()
     if not connection:
         return jsonify({"message": "Error de conexión con la base de datos"}), 500
-
+    
     cursor = connection.cursor()
     try:
-        cursor.execute(""" 
-            SELECT * FROM reservations inner join
-            trips 
-            on reservations.trip_id = trips.id
-            where reservations.user_id = %s
-        """, (str(user_id),))
-        trips = cursor.fetchall()
-
-        if not trips:
-            return jsonify({"message": "No hay reservas disponibles"}), 404
-
-        return jsonify({"trips": trips}), 200
+        # Eliminar la reserva específica del usuario para ese trip
+        cursor.execute("""
+            DELETE FROM reservations
+            WHERE user_id = %s AND trip_id = %s
+        """, (user_id, trip_id))
+        
+        if cursor.rowcount == 0:
+            return jsonify({"message": "Reserva no encontrada"}), 404
+        
+        connection.commit()
+        return jsonify({"message": "Reserva cancelada correctamente"}), 200
+    
     except Exception as e:
-        logging.error(f"Error al obtener reservas: {e}")
-        return jsonify({"message": "Error al obtener las reservas"}), 500
+        logging.error(f"Error al cancelar la reserva: {e}")
+        return jsonify({"message": "Error al cancelar la reserva"}), 500
+    
     finally:
         cursor.close()
-        connection.close()  '''
+        connection.close()
+
     
 @app.route('/reservations/explorer/<uuid:user_id>', methods=['GET'])
 def get_reservations_explorer(user_id):
