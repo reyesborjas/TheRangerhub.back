@@ -1,3 +1,4 @@
+# Esta es la API funcional
 from flask import Flask, request, jsonify
 import psycopg2
 import os
@@ -13,8 +14,7 @@ import uuid
 load_dotenv()
 
 app = Flask(__name__)
-# More explicit CORS configuration
-CORS(app, resources={r"/*": {"origins": "*"}}, supports_credentials=True)
+CORS(app)
 
 logging.basicConfig(level=logging.INFO)
 
@@ -51,10 +51,8 @@ def about():
 @app.route('/register', methods=['POST'])
 def register():
     """Registra un nuevo usuario"""
-    logging.info("Register attempt received")
     connection = get_db_connection()
     if not connection:
-        logging.error("Database connection failed during registration")
         return jsonify({"message": "Error de conexión con la base de datos"}), 500
 
     cursor = connection.cursor()
@@ -105,25 +103,20 @@ def get_roles():
 
 @app.route('/login', methods=['POST'])
 def login():
-    logging.info("Login attempt received")
     connection = get_db_connection()
     if not connection:
-        logging.error("Database connection failed during login")
         return jsonify({"message": "Error de conexión con la base de datos"}), 500
 
     cursor = connection.cursor()
     try:
         body = request.get_json()
-        logging.info(f"Login request body: {body}")
         username = body.get("username")
         password = body.get("password")
 
         if not username or not password:
-            logging.warning("Missing username or password")
             return jsonify({"message": "Debe ingresar usuario y contraseña"}), 400
        
         hashed_password = hash_password(password)  # Hashear la contraseña ingresada
-        logging.info(f"Attempting login for user: {username}")
 
         cursor.execute(
             """SELECT users.id, users.username, users.role_id, user_roles.role_name, users.password FROM users 
@@ -143,12 +136,7 @@ def login():
                 'role_name': user['role_name'],
                 "exp": datetime.datetime.utcnow() + datetime.timedelta(hours=2)
             }, SECRET_KEY, algorithm="HS256")
-            
-            # Ensure token is string, not bytes
-            if isinstance(token, bytes):
-                token = token.decode('utf-8')
-            
-            logging.info(f"Login successful for user: {username}")
+
             return jsonify({
                 "message": "Login exitoso", 
                 "token": token,
@@ -161,7 +149,6 @@ def login():
                 }
             }), 200
         else:
-            logging.warning(f"Invalid credentials for user: {username}")
             return jsonify({"message": "Credenciales incorrectas"}), 401
 
     except Exception as e:
@@ -617,39 +604,18 @@ def create_reservation():
         cursor.close()
         connection.close()
 
-# Add this new route to the Flask app
-@app.route('/reservations/trip/<string:trip_id>/user/<string:user_id>', methods=['DELETE'])
-def delete_reservation_by_trip_user(trip_id, user_id):
+@app.route('/reservations/<string:reservation_id>', methods=['DELETE'])
+def delete_reservation(reservation_id):
     connection = get_db_connection()
     if not connection:
         return jsonify({"message": "Error de conexión con la base de datos"}), 500
-    
     cursor = connection.cursor()
     try:
-        # Validate UUID format
-        try:
-            trip_uuid = uuid.UUID(trip_id)
-            user_uuid = uuid.UUID(user_id)
-        except ValueError:
-            return jsonify({"message": "Formato de UUID inválido"}), 400
-        
-        # Find and delete the reservation that matches both trip_id and user_id
-        cursor.execute(
-            "DELETE FROM reservations WHERE trip_id = %s AND user_id = %s RETURNING id", 
-            (str(trip_uuid), str(user_uuid))
-        )
-        
-        deleted = cursor.fetchone()
-        connection.commit()
-        
-        if not deleted:
+        cursor.execute("DELETE FROM reservations WHERE id = %s", (reservation_id,))
+        if cursor.rowcount == 0: 
             return jsonify({"message": "Reserva no encontrada"}), 404
-            
-        return jsonify({
-            "message": "Reserva eliminada correctamente",
-            "id": str(deleted["id"])
-        }), 200
-        
+        connection.commit()
+        return jsonify({"message": "Reserva eliminada correctamente"}), 200
     except Exception as e:
         logging.error(f"Error al eliminar la reserva: {str(e)}")
         return jsonify({"message": "Error interno del servidor"}), 500
@@ -760,13 +726,15 @@ def get_reservations_ranger(user_id):
         cursor.close()
         connection.close()      
 
+import uuid  # Importar módulo para trabajar con UUIDs
+
 @app.route('/reservations/user/<user_id>', methods=['GET'])
 def get_reservations_by_user(user_id):
     connection = get_db_connection()
     if not connection:
         return jsonify({"message": "Error de conexión con la base de datos"}), 500
 
-    cursor = connection.cursor()  # Using RealDictCursor from get_db_connection
+    cursor = connection.cursor(dictionary=True)  # Habilita la conversión de filas a diccionarios
     try:
         # Convertir el user_id a UUID (manejar error si el formato es incorrecto)
         try:
@@ -790,13 +758,7 @@ def get_reservations_by_user(user_id):
         cursor.close()
         connection.close()
 
-# Add explicit CORS headers
-@app.after_request
-def add_headers(response):
-    response.headers.add('Access-Control-Allow-Origin', '*')
-    response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
-    response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
-    return response
+
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", debug=True, port=5000)
