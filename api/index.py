@@ -10,7 +10,6 @@ from dotenv import load_dotenv
 from flask_cors import CORS
 import uuid
 
-
 load_dotenv()
 
 app = Flask(__name__)
@@ -89,7 +88,7 @@ def get_roles():
 
     cursor = connection.cursor()
     try:
-        cursor.execute("SELECT * FROM user_roles where role_name != 'Admin'")
+        cursor.execute("SELECT * FROM user_roles")
         roles = cursor.fetchall()
         if not roles:
             return jsonify({"message": "No hay roles disponibles"}), 404
@@ -407,7 +406,7 @@ def get_locations():
                 "total": total,
                 "page": page,
                 "per_page": per_page,
-                "total_pages": (total + per_page - 1) 
+                "total_pages": (total + per_page - 1) // per_page
             }
         }), 200
 
@@ -604,7 +603,24 @@ def create_reservation():
         cursor.close()
         connection.close()
 
-
+@app.route('/reservations/<string:reservation_id>', methods=['DELETE'])
+def delete_reservation(reservation_id):
+    connection = get_db_connection()
+    if not connection:
+        return jsonify({"message": "Error de conexión con la base de datos"}), 500
+    cursor = connection.cursor()
+    try:
+        cursor.execute("DELETE FROM reservations WHERE id = %s", (reservation_id,))
+        if cursor.rowcount == 0: 
+            return jsonify({"message": "Reserva no encontrada"}), 404
+        connection.commit()
+        return jsonify({"message": "Reserva eliminada correctamente"}), 200
+    except Exception as e:
+        logging.error(f"Error al eliminar la reserva: {str(e)}")
+        return jsonify({"message": "Error interno del servidor"}), 500
+    finally:
+        cursor.close()
+        connection.close()
 
         
 # Endpoint para Rangers
@@ -626,8 +642,7 @@ def get_ranger_trips(user_id):
         connection.close()
 
 # Endpoint para Explorers
-'''@app.route('/reservations/explorer/<string:user_id>', methods=['GET'])
-
+@app.route('/trips/explorer/<uuid:user_id>', methods=['GET'])
 def get_explorer_trips(user_id):
     connection = get_db_connection()
     try:
@@ -635,19 +650,9 @@ def get_explorer_trips(user_id):
         
         # Paso 1: Obtener reservas del usuario
         cursor.execute("""
-           
-            SELECT 
-                reservations.id AS reservation_id,
-                trips.id AS trip_id,
-                trips.trip_name,
-                trips.trip_image_url,
-                trips.total_cost,
-                reservations.status
-            FROM reservations 
-            INNER JOIN trips ON reservations.trip_id = trips.id
-            WHERE reservations.user_id = %s
+            SELECT trip_id FROM reservations 
+            WHERE user_id = %s::uuid
         """, (str(user_id),))
-
         reservations = cursor.fetchall()
         trip_ids = [str(r['trip_id']) for r in reservations]
 
@@ -666,39 +671,11 @@ def get_explorer_trips(user_id):
         return jsonify({"error": str(e)}), 500
     finally:
         cursor.close()
-        connection.close()'''
-        
-@app.route('/reservations/explorer/<uid:user_id>/<uuid:trip_id>', methods=['DELETE'])
-def cancel_reservation(user_id, trip_id):
-    connection = get_db_connection()
-    if not connection:
-        return jsonify({"message": "Error de conexión con la base de datos"}), 500
-    
-    cursor = connection.cursor()
-    try:
-        # Eliminar la reserva específica del usuario para ese trip
-        cursor.execute("""
-            DELETE FROM reservations
-            WHERE user_id = %s AND trip_id = %s
-        """, (user_id, trip_id))
-        
-        if cursor.rowcount == 0:
-            return jsonify({"message": "Reserva no encontrada"}), 404
-        
-        connection.commit()
-        return jsonify({"message": "Reserva cancelada correctamente"}), 200
-    
-    except Exception as e:
-        logging.error(f"Error al cancelar la reserva: {e}")
-        return jsonify({"message": "Error al cancelar la reserva"}), 500
-    
-    finally:
-        cursor.close()
         connection.close()
 
-    
 @app.route('/reservations/explorer/<uuid:user_id>', methods=['GET'])
 def get_reservations_explorer(user_id):
+
     connection = get_db_connection()
     if not connection:
         return jsonify({"message": "Error de conexión con la base de datos"}), 500
@@ -706,21 +683,12 @@ def get_reservations_explorer(user_id):
     cursor = connection.cursor()
     try:
         cursor.execute(""" 
-            SELECT 
-                reservations.id AS reservation_id,  -- Alias para el ID de la reservación
-                trips.id AS trip_id,  -- Alias para el ID del viaje
-                trips.trip_name,
-                trips.trip_image_url,
-                trips.total_cost,
-                reservations.status
-            FROM reservations 
-            INNER JOIN trips ON reservations.trip_id = trips.id
-            WHERE reservations.user_id = %s
+            SELECT * FROM reservations inner join
+            trips 
+            on reservations.trip_id = trips.id
+            where reservations.user_id = %s
         """, (str(user_id),))
-        
-        # Convertir resultados a lista de diccionarios
-        columns = [desc[0] for desc in cursor.description]
-        trips = [dict(zip(columns, row)) for row in cursor.fetchall()]
+        trips = cursor.fetchall()
 
         if not trips:
             return jsonify({"message": "No hay reservas disponibles"}), 404
@@ -757,7 +725,7 @@ def get_reservations_ranger(user_id):
         cursor.close()
         connection.close()      
 
-
+import uuid  # Importar módulo para trabajar con UUIDs
 
 @app.route('/reservations/user/<user_id>', methods=['GET'])
 def get_reservations_by_user(user_id):
