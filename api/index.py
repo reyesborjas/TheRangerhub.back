@@ -40,6 +40,19 @@ def hash_password(password):
     """Hashea la contraseña con SHA-256"""
     return hashlib.sha256(password.encode()).hexdigest()
 
+@app.after_request
+def add_headers(response):
+    response.headers.add('Access-Control-Allow-Origin', '*')
+    response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
+    response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
+    return response
+
+@app.route('/', defaults={'path': ''}, methods=['OPTIONS'])
+@app.route('/<path:path>', methods=['OPTIONS'])
+def options_handler(path):
+    response = app.make_default_options_response()
+    return response
+
 @app.route('/')
 def home():
     return 'Hello, World!'
