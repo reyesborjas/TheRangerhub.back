@@ -407,7 +407,7 @@ def get_locations():
                 "total": total,
                 "page": page,
                 "per_page": per_page,
-                "total_pages": (total + per_page - 1) // per_page
+                "total_pages": (total + per_page - 1) 
             }
         }), 200
 
