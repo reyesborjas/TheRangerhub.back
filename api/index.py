@@ -643,7 +643,8 @@ def get_ranger_trips(user_id):
         connection.close()
 
 # Endpoint para Explorers
-@app.route('/trips/explorer/<uuid:user_id>', methods=['GET'])
+@app.route('/reservations/explorer/<string:user_id>', methods=['GET'])
+
 def get_explorer_trips(user_id):
     connection = get_db_connection()
     try:
