@@ -52,9 +52,7 @@ def options_handler(path):
     response = app.make_default_options_response()
     return response
 
-@app.route('/')
-def home():
-    return 'Hello, World!'
+
 
 @app.route('/about')
 def about():
