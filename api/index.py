@@ -13,8 +13,12 @@ import uuid
 load_dotenv()
 
 app = Flask(__name__)
-# More explicit CORS configuration
-CORS(app, resources={r"/*": {"origins": "*"}}, supports_credentials=True)
+# Combined CORS configuration
+CORS(app, resources={r"/*": {
+    "origins": "*",
+    "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    "supports_credentials": True
+}})
 
 logging.basicConfig(level=logging.INFO)
 
@@ -626,44 +630,6 @@ def create_reservation():
         connection.close()
 
 # Add this new route to the Flask app
-@app.route('/reservations/trip/<string:trip_id>/user/<string:user_id>', methods=['DELETE'])
-def delete_reservation_by_trip_user(trip_id, user_id):
-    connection = get_db_connection()
-    if not connection:
-        return jsonify({"message": "Error de conexión con la base de datos"}), 500
-    
-    cursor = connection.cursor()
-    try:
-        # Validate UUID format
-        try:
-            trip_uuid = uuid.UUID(trip_id)
-            user_uuid = uuid.UUID(user_id)
-        except ValueError:
-            return jsonify({"message": "Formato de UUID inválido"}), 400
-        
-        # Find and delete the reservation that matches both trip_id and user_id
-        cursor.execute(
-            "DELETE FROM reservations WHERE trip_id = %s AND user_id = %s RETURNING id", 
-            (str(trip_uuid), str(user_uuid))
-        )
-        
-        deleted = cursor.fetchone()
-        connection.commit()
-        
-        if not deleted:
-            return jsonify({"message": "Reserva no encontrada"}), 404
-            
-        return jsonify({
-            "message": "Reserva eliminada correctamente",
-            "id": str(deleted["id"])
-        }), 200
-        
-    except Exception as e:
-        logging.error(f"Error al eliminar la reserva: {str(e)}")
-        return jsonify({"message": "Error interno del servidor"}), 500
-    finally:
-        cursor.close()
-        connection.close()
 
         
 # Endpoint para Rangers
@@ -798,7 +764,100 @@ def get_reservations_by_user(user_id):
         cursor.close()
         connection.close()
 
+@app.route('/reservations/<string:reservation_id>', methods=['DELETE'])
+def delete_reservation(reservation_id):
+    logging.info(f"Attempting to delete reservation with ID: {reservation_id}")
+    connection = get_db_connection()
+    if not connection:
+        return jsonify({"message": "Error de conexión con la base de datos"}), 500
+    
+    cursor = connection.cursor()
+    try:
+        cursor.execute("DELETE FROM reservations WHERE id = %s RETURNING id", (reservation_id,))
+        deleted = cursor.fetchone()
+        
+        if not deleted:
+            logging.warning(f"Reservation not found: {reservation_id}")
+            return jsonify({"message": "Reserva no encontrada"}), 404
+            
+        connection.commit()
+        logging.info(f"Successfully deleted reservation: {reservation_id}")
+        return jsonify({"message": "Reserva eliminada correctamente"}), 200
+    
+    except Exception as e:
+        logging.error(f"Error deleting reservation: {str(e)}")
+        return jsonify({"message": f"Error interno del servidor: {str(e)}"}), 500
+    finally:
+        cursor.close()
+        connection.close()
 
+# Alternative reservation deletion endpoint - by trip ID
+@app.route('/reservations/trip/<string:trip_id>', methods=['DELETE'])
+def delete_reservation_by_trip(trip_id):
+    logging.info(f"Attempting to delete reservation with trip ID: {trip_id}")
+    connection = get_db_connection()
+    if not connection:
+        return jsonify({"message": "Error de conexión con la base de datos"}), 500
+    
+    cursor = connection.cursor()
+    try:
+        # Try to find and delete by trip_id
+        cursor.execute("DELETE FROM reservations WHERE trip_id = %s RETURNING id", (trip_id,))
+        deleted = cursor.fetchone()
+        
+        if not deleted:
+            logging.warning(f"No reservation found for trip: {trip_id}")
+            return jsonify({"message": "Reserva no encontrada"}), 404
+            
+        connection.commit()
+        logging.info(f"Successfully deleted reservation for trip: {trip_id}")
+        return jsonify({"message": "Reserva eliminada correctamente"}), 200
+    
+    except Exception as e:
+        logging.error(f"Error deleting reservation: {str(e)}")
+        return jsonify({"message": f"Error interno del servidor: {str(e)}"}), 500
+    finally:
+        cursor.close()
+        connection.close()
+
+# More specific endpoint - by trip and user ID
+@app.route('/reservations/trip/<string:trip_id>/user/<string:user_id>', methods=['DELETE'])
+def delete_reservation_by_trip_user(trip_id, user_id):
+    logging.info(f"Attempting to delete reservation with trip ID: {trip_id} and user ID: {user_id}")
+    connection = get_db_connection()
+    if not connection:
+        return jsonify({"message": "Error de conexión con la base de datos"}), 500
+    
+    cursor = connection.cursor()
+    try:
+        # Try to find and delete by both trip_id and user_id
+        cursor.execute(
+            "DELETE FROM reservations WHERE trip_id = %s AND user_id = %s RETURNING id", 
+            (trip_id, user_id)
+        )
+        
+        deleted = cursor.fetchone()
+        
+        if not deleted:
+            logging.warning(f"No reservation found for trip: {trip_id} and user: {user_id}")
+            return jsonify({"message": "Reserva no encontrada"}), 404
+            
+        connection.commit()
+        logging.info(f"Successfully deleted reservation for trip: {trip_id} and user: {user_id}")
+        return jsonify({"message": "Reserva eliminada correctamente"}), 200
+    
+    except Exception as e:
+        logging.error(f"Error deleting reservation: {str(e)}")
+        return jsonify({"message": f"Error interno del servidor: {str(e)}"}), 500
+    finally:
+        cursor.close()
+        connection.close()
+        
+@app.route('/', defaults={'path': ''}, methods=['OPTIONS'])
+@app.route('/<path:path>', methods=['OPTIONS'])
+def options_handler(path):
+    response = app.make_default_options_response()
+    return response
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", debug=True, port=5000)
