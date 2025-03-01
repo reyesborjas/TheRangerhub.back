@@ -40,12 +40,7 @@ def hash_password(password):
     """Hashea la contraseña con SHA-256"""
     return hashlib.sha256(password.encode()).hexdigest()
 
-@app.after_request
-def add_headers(response):
-    response.headers.add('Access-Control-Allow-Origin', '*')
-    response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
-    response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
-    return response
+
 
 @app.route('/', defaults={'path': ''}, methods=['OPTIONS'])
 @app.route('/<path:path>', methods=['OPTIONS'])
@@ -803,13 +798,7 @@ def get_reservations_by_user(user_id):
         cursor.close()
         connection.close()
 
-# Add explicit CORS headers
-@app.after_request
-def add_headers(response):
-    response.headers.add('Access-Control-Allow-Origin', '*')
-    response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
-    response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
-    return response
+
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", debug=True, port=5000)
