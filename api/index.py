@@ -606,6 +606,7 @@ def create_reservation():
 
 @app.route('/reservations/<string:reservation_id>', methods=['DELETE'])
 def delete_reservation(reservation_id):
+    print(f"Intentando eliminar reserva con ID: {reservation_id}")  # Debugging
     connection = get_db_connection()
     if not connection:
         return jsonify({"message": "Error de conexión con la base de datos"}), 500
@@ -622,6 +623,7 @@ def delete_reservation(reservation_id):
     finally:
         cursor.close()
         connection.close()
+
 
         
 # Endpoint para Rangers
