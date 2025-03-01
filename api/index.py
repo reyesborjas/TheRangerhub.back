@@ -652,9 +652,19 @@ def get_explorer_trips(user_id):
         
         # Paso 1: Obtener reservas del usuario
         cursor.execute("""
-            SELECT trip_id FROM reservations 
-            WHERE user_id = %s::uuid
+           
+            SELECT 
+                reservations.id AS reservation_id,
+                trips.id AS trip_id,
+                trips.trip_name,
+                trips.trip_image_url,
+                trips.total_cost,
+                reservations.status
+            FROM reservations 
+            INNER JOIN trips ON reservations.trip_id = trips.id
+            WHERE reservations.user_id = %s
         """, (str(user_id),))
+
         reservations = cursor.fetchall()
         trip_ids = [str(r['trip_id']) for r in reservations]
 
