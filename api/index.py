@@ -10,6 +10,7 @@ from dotenv import load_dotenv
 from flask_cors import CORS
 import uuid
 
+
 load_dotenv()
 
 app = Flask(__name__)
@@ -673,7 +674,7 @@ def get_explorer_trips(user_id):
         cursor.close()
         connection.close()
 
-@app.route('/reservations/explorer/<uuid:user_id>', methods=['GET'])
+''' @app.route('/reservations/explorer/<uuid:user_id>', methods=['GET'])
 def get_reservations_explorer(user_id):
 
     connection = get_db_connection()
@@ -689,6 +690,42 @@ def get_reservations_explorer(user_id):
             where reservations.user_id = %s
         """, (str(user_id),))
         trips = cursor.fetchall()
+
+        if not trips:
+            return jsonify({"message": "No hay reservas disponibles"}), 404
+
+        return jsonify({"trips": trips}), 200
+    except Exception as e:
+        logging.error(f"Error al obtener reservas: {e}")
+        return jsonify({"message": "Error al obtener las reservas"}), 500
+    finally:
+        cursor.close()
+        connection.close()  '''
+    
+@app.route('/reservations/explorer/<uuid:user_id>', methods=['GET'])
+def get_reservations_explorer(user_id):
+    connection = get_db_connection()
+    if not connection:
+        return jsonify({"message": "Error de conexión con la base de datos"}), 500
+
+    cursor = connection.cursor()
+    try:
+        cursor.execute(""" 
+            SELECT 
+                reservations.id AS reservation_id,  -- Alias para el ID de la reservación
+                trips.id AS trip_id,  -- Alias para el ID del viaje
+                trips.trip_name,
+                trips.trip_image_url,
+                trips.total_cost,
+                reservations.status
+            FROM reservations 
+            INNER JOIN trips ON reservations.trip_id = trips.id
+            WHERE reservations.user_id = %s
+        """, (str(user_id),))
+        
+        # Convertir resultados a lista de diccionarios
+        columns = [desc[0] for desc in cursor.description]
+        trips = [dict(zip(columns, row)) for row in cursor.fetchall()]
 
         if not trips:
             return jsonify({"message": "No hay reservas disponibles"}), 404
@@ -725,7 +762,7 @@ def get_reservations_ranger(user_id):
         cursor.close()
         connection.close()      
 
-import uuid  # Importar módulo para trabajar con UUIDs
+
 
 @app.route('/reservations/user/<user_id>', methods=['GET'])
 def get_reservations_by_user(user_id):
