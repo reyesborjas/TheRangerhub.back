@@ -10,6 +10,10 @@ from dotenv import load_dotenv
 from flask_cors import CORS
 import uuid
 import json
+from flask import Blueprint, jsonify
+from sqlalchemy.sql import text
+from database import get_db_connection
+
 load_dotenv()
 
 app = Flask(__name__)
@@ -1226,9 +1230,8 @@ def get_trip_resources(trip_id):
     finally:
         cursor.close()
         connection.close()
-
-
-
+# Crear un blueprint para las rutas de reservaciones
+reservations_bp = Blueprint('reservations', __name__)
 
 @reservations_bp.route('/reservations/trip/<string:trip_id>/explorers', methods=['GET'])
 def get_trip_explorers(trip_id):
@@ -1287,6 +1290,8 @@ def get_trip_explorers(trip_id):
         print(f"Error al obtener explorers para el viaje {trip_id}: {str(e)}")
         return jsonify({"error": f"Error al obtener explorers: {str(e)}"}), 500
 
+# Para registrar el blueprint en tu aplicación principal:
+# app.register_blueprint(reservations_bp)
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", debug=True, port=5000)
