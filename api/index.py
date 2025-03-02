@@ -874,30 +874,47 @@ def delete_resource(resource_id):
         # Begin transaction
         connection.autocommit = False
         
-        # Check if resource is referenced in trip_resources
-        cursor.execute("SELECT COUNT(*) FROM trip_resources WHERE resource_id = %s", (str(resource_uuid),))
-        references_count = cursor.fetchone()['count']
+        # Check if resource is referenced in trip_resources and get trip names
+        cursor.execute("""
+            SELECT t.trip_name, t.id
+            FROM trip_resources tr
+            JOIN trips t ON tr.trip_id = t.id
+            WHERE tr.resource_id = %s
+        """, (str(resource_uuid),))
         
-        if references_count > 0:
-            # Option 1: Return error informing that the resource is in use
-            return jsonify({
-                "message": f"No se puede eliminar el recurso porque está siendo utilizado en {references_count} viaje(s)",
-                "references": references_count
-            }), 409
+        trips = cursor.fetchall()
+        
+        if trips:
+            # Create a list of trip names
+            trip_names = [trip['trip_name'] for trip in trips]
             
-            # Option 2 (Uncomment to use): Delete all references first, then delete the resource
-            # cursor.execute("DELETE FROM trip_resources WHERE resource_id = %s", (str(resource_uuid),))
-            # logging.info(f"Deleted {references_count} references from trip_resources")
+            # Format the trip names for display
+            if len(trip_names) == 1:
+                trip_list = f'"{trip_names[0]}"'
+            elif len(trip_names) == 2:
+                trip_list = f'"{trip_names[0]}" y "{trip_names[1]}"'
+            else:
+                trip_list = ", ".join([f'"{name}"' for name in trip_names[:-1]]) + f' y "{trip_names[-1]}"'
+            
+            # Return detailed error message
+            return jsonify({
+                "message": f"No se puede eliminar este recurso porque está siendo utilizado por el/los viaje(s): {trip_list}. Debe eliminar estas referencias primero.",
+                "references": len(trips),
+                "trips": [{"id": str(trip["id"]), "name": trip["trip_name"]} for trip in trips]
+            }), 409
         
-        # Delete the resource
-        cursor.execute("DELETE FROM resources WHERE id = %s RETURNING id", (str(resource_uuid),))
+        # If no references, delete the resource
+        cursor.execute("DELETE FROM resources WHERE id = %s RETURNING id, name", (str(resource_uuid),))
         deleted = cursor.fetchone()
         
         # Commit transaction
         connection.commit()
         
         logging.info(f"Successfully deleted resource: {resource_id}")
-        return jsonify({"message": "Recurso eliminado correctamente", "id": str(deleted["id"])}), 200
+        return jsonify({
+            "message": f"Recurso '{deleted['name']}' eliminado correctamente", 
+            "id": str(deleted["id"])
+        }), 200
         
     except Exception as e:
         # Rollback in case of error
