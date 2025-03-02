@@ -25,6 +25,7 @@ CREATE TABLE users (
     user_status VARCHAR(50) NOT NULL DEFAULT 'activo',
     profile_picture_url varchar(255) UNIQUE,
     profile_visibility BOOLEAN NOT NULL DEFAULT TRUE   
+    phone_number varchar(25) UNIQUE
 );
 
 

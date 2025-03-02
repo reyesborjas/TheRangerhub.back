@@ -850,8 +850,7 @@ def delete_reservation_by_trip_user(trip_id, user_id):
         cursor.close()
         connection.close()
         
-@app.route('/reservations/trip/<trip_id>/explorers', methods=['GET'])
-def get_explorers_by_trip(trip_id):
+
     """Obtiene la lista de exploradores registrados en un viaje específico"""
     connection = get_db_connection()
     if not connection:
@@ -883,7 +882,53 @@ def get_explorers_by_trip(trip_id):
     finally:
         connection.close()
 
+@app.route('/reservations/trip/<trip_id>/explorers', methods=['GET'])
+def get_explorers_by_trip(trip_id):
+    """Obtiene la lista de exploradores registrados en un viaje específico"""
+    connection = get_db_connection()
+    if not connection:
+        logging.error("No se pudo conectar a la base de datos")
+        return jsonify({"error": "No se pudo conectar a la base de datos"}), 500
 
+    try:
+        with connection.cursor() as cursor:
+            query = """
+                SELECT 
+                    users.id, 
+                    CONCAT(users.first_name, ' ', users.last_name) AS name, 
+                    users.email, 
+                    users.phone_number AS phone, 
+                    reservations.status
+                FROM reservations
+                JOIN users ON reservations.user_id = users.id
+                WHERE reservations.trip_id = %s;
+            """
+            cursor.execute(query, (trip_id,))
+            explorers = cursor.fetchall()
+
+            if not explorers:
+                logging.warning(f"No se encontraron exploradores para el trip_id: {trip_id}")
+                return jsonify({"explorers": []}), 200  # Cambio: devolver array vacío en lugar de error 404
+
+            # Convertir los resultados en lista de diccionarios para asegurar formato JSON correcto
+            explorer_list = []
+            for explorer in explorers:
+                explorer_list.append({
+                    "id": explorer[0],
+                    "name": explorer[1],
+                    "email": explorer[2],
+                    "phone": explorer[3],  # Cambiado a "phone" para coincidir con el frontend
+                    "status": explorer[4]
+                })
+
+            return jsonify({"explorers": explorer_list}), 200
+
+    except Exception as e:
+        logging.error(f"Error en la consulta SQL: {e}")
+        return jsonify({"error": "Error interno del servidor"}), 500
+
+    finally:
+        connection.close()
 
 @app.route('/resources', methods=['POST'])
 def create_resource():
@@ -1217,6 +1262,7 @@ def create_trip_resource_association():
     finally:
         cursor.close()
         connection.close()
+        
 @app.route('/trips/<string:trip_id>/resources', methods=['GET'])
 def get_trip_resources(trip_id):
     """Obtiene todos los recursos asociados a un viaje específico"""
