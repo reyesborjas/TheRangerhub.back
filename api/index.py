@@ -848,7 +848,86 @@ def delete_reservation_by_trip_user(trip_id, user_id):
         cursor.close()
         connection.close()
         
-# Add these two new routes to your Flask application
+@app.route('/resources', methods=['POST'])
+def create_resource():
+    """Crea un nuevo recurso"""
+    logging.info("Attempting to create a new resource")
+    connection = get_db_connection()
+    if not connection:
+        return jsonify({"message": "Error de conexión con la base de datos"}), 500
+    
+    cursor = connection.cursor()
+    try:
+       
+        body = request.get_json()
+        if not body:
+            return jsonify({"message": "No se proporcionaron datos"}), 400
+            
+        
+        required_fields = ['name', 'description', 'cost']
+        for field in required_fields:
+            if field not in body:
+                return jsonify({"message": f"Campo requerido faltante: {field}"}), 400
+                
+      
+        try:
+            cost = float(body.get("cost"))
+        except (ValueError, TypeError):
+            return jsonify({"message": "El costo debe ser un valor numérico"}), 400
+            
+     
+        cursor.execute("SELECT 1 FROM resources WHERE name = %s", (body.get("name"),))
+        if cursor.fetchone():
+            return jsonify({"message": "Ya existe un recurso con ese nombre"}), 409
+            
+      
+        description = body.get("description")
+        if isinstance(description, dict) or isinstance(description, list):
+            # Already in the right format - psycopg2 will handle JSON serialization
+            description_json = description
+        else:
+            # Try to parse the string as JSON
+            try:
+                description_json = json.loads(description) if isinstance(description, str) else description
+            except json.JSONDecodeError:
+                return jsonify({"message": "El campo description debe ser un JSON válido"}), 400
+                
+        # Insert the new resource
+        cursor.execute("""
+            INSERT INTO resources (name, description, cost)
+            VALUES (%s, %s, %s)
+            RETURNING id, name
+        """, (
+            body.get("name"),
+            psycopg2.extras.Json(description_json),  # Properly handle JSONB
+            cost
+        ))
+        
+        created = cursor.fetchone()
+        connection.commit()
+        
+        logging.info(f"Successfully created resource: {created['name']}")
+        return jsonify({
+            "message": "Recurso creado correctamente",
+            "resource": {
+                "id": str(created["id"]),
+                "name": created["name"]
+            }
+        }), 201
+        
+    except psycopg2.IntegrityError as e:
+        logging.error(f"Integrity error: {str(e)}")
+        connection.rollback()
+        return jsonify({"message": "Error de integridad en la base de datos"}), 400
+        
+    except Exception as e:
+        logging.error(f"Error creating resource: {str(e)}")
+        connection.rollback()
+        return jsonify({"message": f"Error interno del servidor: {str(e)}"}), 500
+    finally:
+        cursor.close()
+        connection.close()
+
 
 @app.route('/resources/<string:resource_id>', methods=['DELETE'])
 def delete_resource(resource_id):
@@ -924,6 +1003,7 @@ def delete_resource(resource_id):
     finally:
         cursor.close()
         connection.close()
+        
             
 @app.route('/resources/<string:resource_id>', methods=['PUT'])
 def update_resource(resource_id):
