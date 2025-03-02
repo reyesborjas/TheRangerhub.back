@@ -871,9 +871,6 @@ def delete_resource(resource_id):
         if not cursor.fetchone():
             return jsonify({"message": "Recurso no encontrado"}), 404
         
-        # Begin transaction
-        connection.autocommit = False
-        
         # Check if resource is referenced in trip_resources and get trip names
         cursor.execute("""
             SELECT t.trip_name, t.id
@@ -907,7 +904,10 @@ def delete_resource(resource_id):
         cursor.execute("DELETE FROM resources WHERE id = %s RETURNING id, name", (str(resource_uuid),))
         deleted = cursor.fetchone()
         
-        # Commit transaction
+        if not deleted:
+            return jsonify({"message": "No se pudo eliminar el recurso"}), 500
+            
+        # Commit changes
         connection.commit()
         
         logging.info(f"Successfully deleted resource: {resource_id}")
@@ -918,17 +918,12 @@ def delete_resource(resource_id):
         
     except Exception as e:
         # Rollback in case of error
-        if connection:
-            connection.rollback()
+        connection.rollback()
         logging.error(f"Error deleting resource: {str(e)}")
         return jsonify({"message": f"Error interno del servidor: {str(e)}"}), 500
     finally:
-        if cursor:
-            cursor.close()
-        if connection:
-            # Reset autocommit
-            connection.autocommit = True
-            connection.close()
+        cursor.close()
+        connection.close()
             
 @app.route('/resources/<string:resource_id>', methods=['PUT'])
 def update_resource(resource_id):
