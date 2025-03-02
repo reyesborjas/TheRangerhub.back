@@ -10,10 +10,6 @@ from dotenv import load_dotenv
 from flask_cors import CORS
 import uuid
 import json
-from flask import Blueprint, jsonify
-from sqlalchemy.sql import text
-from database import get_db_connection
-
 load_dotenv()
 
 app = Flask(__name__)
@@ -1230,68 +1226,6 @@ def get_trip_resources(trip_id):
     finally:
         cursor.close()
         connection.close()
-# Crear un blueprint para las rutas de reservaciones
-reservations_bp = Blueprint('reservations', __name__)
-
-@reservations_bp.route('/reservations/trip/<string:trip_id>/explorers', methods=['GET'])
-def get_trip_explorers(trip_id):
-    """
-    Obtiene todos los explorers que han reservado un viaje específico.
-    
-    Args:
-        trip_id: ID del viaje
-        
-    Returns:
-        JSON con la lista de explorers y sus detalles
-    """
-    try:
-        # Obtener conexión a la base de datos
-        conn = get_db_connection()
-        
-        # Query SQL para obtener explorers que han reservado el viaje
-        query = text("""
-            SELECT 
-                u.id,
-                u.name,
-                u.email,
-                u.phone,
-                r.status
-            FROM 
-                reservations r
-            JOIN 
-                users u ON r.user_id = u.id
-            WHERE 
-                r.trip_id = :trip_id
-                AND u.role_id = (SELECT id FROM roles WHERE name = 'Explorer')
-        """)
-        
-        # Ejecutar la consulta con el ID del viaje
-        result = conn.execute(query, {"trip_id": trip_id}).fetchall()
-        
-        # Cerrar la conexión
-        conn.close()
-        
-        # Convertir resultado a lista de diccionarios
-        explorers = []
-        for row in result:
-            explorers.append({
-                "id": str(row.id),  # Convertir UUID a string para JSON
-                "name": row.name,
-                "email": row.email,
-                "phone": row.phone,
-                "status": row.status
-            })
-        
-        # Devolver resultado como JSON
-        return jsonify({"explorers": explorers})
-        
-    except Exception as e:
-        # Manejar y registrar errores
-        print(f"Error al obtener explorers para el viaje {trip_id}: {str(e)}")
-        return jsonify({"error": f"Error al obtener explorers: {str(e)}"}), 500
-
-# Para registrar el blueprint en tu aplicación principal:
-# app.register_blueprint(reservations_bp)
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", debug=True, port=5000)
