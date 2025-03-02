@@ -9,7 +9,7 @@ from psycopg2.extras import RealDictCursor
 from dotenv import load_dotenv
 from flask_cors import CORS
 import uuid
-
+import json
 load_dotenv()
 
 app = Flask(__name__)
@@ -843,6 +843,141 @@ def delete_reservation_by_trip_user(trip_id, user_id):
     
     except Exception as e:
         logging.error(f"Error deleting reservation: {str(e)}")
+        return jsonify({"message": f"Error interno del servidor: {str(e)}"}), 500
+    finally:
+        cursor.close()
+        connection.close()
+        
+# Add these two new routes to your Flask application
+
+@app.route('/resources/<string:resource_id>', methods=['DELETE'])
+def delete_resource(resource_id):
+    """Elimina un recurso por su ID"""
+    logging.info(f"Attempting to delete resource with ID: {resource_id}")
+    connection = get_db_connection()
+    if not connection:
+        return jsonify({"message": "Error de conexión con la base de datos"}), 500
+    
+    cursor = connection.cursor()
+    try:
+        # Validate UUID format
+        try:
+            resource_uuid = uuid.UUID(resource_id)
+        except ValueError:
+            return jsonify({"message": "Formato de UUID inválido"}), 400
+            
+        # Check if resource exists
+        cursor.execute("SELECT 1 FROM resources WHERE id = %s", (str(resource_uuid),))
+        if not cursor.fetchone():
+            return jsonify({"message": "Recurso no encontrado"}), 404
+            
+        # Delete the resource
+        cursor.execute("DELETE FROM resources WHERE id = %s RETURNING id", (str(resource_uuid),))
+        deleted = cursor.fetchone()
+        connection.commit()
+        
+        logging.info(f"Successfully deleted resource: {resource_id}")
+        return jsonify({"message": "Recurso eliminado correctamente", "id": str(deleted["id"])}), 200
+        
+    except Exception as e:
+        logging.error(f"Error deleting resource: {str(e)}")
+        return jsonify({"message": f"Error interno del servidor: {str(e)}"}), 500
+    finally:
+        cursor.close()
+        connection.close()
+
+@app.route('/resources/<string:resource_id>', methods=['PUT'])
+def update_resource(resource_id):
+    """Actualiza un recurso por su ID"""
+    logging.info(f"Attempting to update resource with ID: {resource_id}")
+    connection = get_db_connection()
+    if not connection:
+        return jsonify({"message": "Error de conexión con la base de datos"}), 500
+    
+    cursor = connection.cursor()
+    try:
+        # Validate UUID format
+        try:
+            resource_uuid = uuid.UUID(resource_id)
+        except ValueError:
+            return jsonify({"message": "Formato de UUID inválido"}), 400
+        
+        # Get request body
+        body = request.get_json()
+        if not body:
+            return jsonify({"message": "No se proporcionaron datos para actualizar"}), 400
+            
+        # Check required fields
+        required_fields = ['name', 'description', 'cost']
+        for field in required_fields:
+            if field not in body:
+                return jsonify({"message": f"Campo requerido faltante: {field}"}), 400
+                
+        # Validate cost is numeric
+        try:
+            cost = float(body.get("cost"))
+        except (ValueError, TypeError):
+            return jsonify({"message": "El costo debe ser un valor numérico"}), 400
+            
+        # Check if resource exists
+        cursor.execute("SELECT 1 FROM resources WHERE id = %s", (str(resource_uuid),))
+        if not cursor.fetchone():
+            return jsonify({"message": "Recurso no encontrado"}), 404
+            
+        # Check for name uniqueness (if changing name)
+        cursor.execute("""
+            SELECT 1 FROM resources 
+            WHERE name = %s AND id != %s
+        """, (body.get("name"), str(resource_uuid)))
+        
+        if cursor.fetchone():
+            return jsonify({"message": "Ya existe un recurso con ese nombre"}), 409
+            
+        # Serialize description as JSON if it's not already
+        description = body.get("description")
+        if isinstance(description, dict) or isinstance(description, list):
+            # Already in the right format - psycopg2 will handle JSON serialization
+            description_json = description
+        else:
+            # Try to parse the string as JSON
+            try:
+                description_json = json.loads(description) if isinstance(description, str) else description
+            except json.JSONDecodeError:
+                return jsonify({"message": "El campo description debe ser un JSON válido"}), 400
+                
+        # Update the resource
+        cursor.execute("""
+            UPDATE resources 
+            SET name = %s, description = %s, cost = %s
+            WHERE id = %s
+            RETURNING id, name
+        """, (
+            body.get("name"),
+            psycopg2.extras.Json(description_json),  # Properly handle JSONB
+            cost,
+            str(resource_uuid)
+        ))
+        
+        updated = cursor.fetchone()
+        connection.commit()
+        
+        logging.info(f"Successfully updated resource: {resource_id}")
+        return jsonify({
+            "message": "Recurso actualizado correctamente",
+            "resource": {
+                "id": str(updated["id"]),
+                "name": updated["name"]
+            }
+        }), 200
+        
+    except psycopg2.IntegrityError as e:
+        logging.error(f"Integrity error: {str(e)}")
+        connection.rollback()
+        return jsonify({"message": "Error de integridad en la base de datos"}), 400
+        
+    except Exception as e:
+        logging.error(f"Error updating resource: {str(e)}")
+        connection.rollback()
         return jsonify({"message": f"Error interno del servidor: {str(e)}"}), 500
     finally:
         cursor.close()
