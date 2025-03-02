@@ -16,16 +16,6 @@ app = Flask(__name__)
 # Combined CORS configuration
 CORS(app)
 
-# Add a specific OPTIONS handler
-@app.route('/<path:path>', methods=['OPTIONS'])
-@app.route('/', methods=['OPTIONS'])
-def options_handler(path=''):
-    response = jsonify({'status': 'ok'})
-    response.headers.add('Access-Control-Allow-Origin', '*')
-    response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
-    response.headers.add('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS')
-    return response
-
 logging.basicConfig(level=logging.INFO)
 
 SECRET_KEY = os.getenv("SECRET_KEY", "super_secreto_por_defecto")
@@ -50,15 +40,20 @@ def hash_password(password):
     """Hashea la contraseña con SHA-256"""
     return hashlib.sha256(password.encode()).hexdigest()
 
-
-
+# Define OPTIONS handler once - using explicit headers for better CORS compatibility
 @app.route('/', defaults={'path': ''}, methods=['OPTIONS'])
 @app.route('/<path:path>', methods=['OPTIONS'])
-def options_handler(path):
-    response = app.make_default_options_response()
+def options_handler(path=''):
+    response = jsonify({'status': 'ok'})
+    response.headers.add('Access-Control-Allow-Origin', '*')
+    response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization,Accept')
+    response.headers.add('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS')
     return response
 
-
+# Define root route
+@app.route('/')
+def home():
+    return 'RangerHub API'
 
 @app.route('/about')
 def about():
@@ -250,7 +245,7 @@ def get_all_activities():
     if not connection:
         return jsonify({"message": "Error de conexión con la base de datos"}), 500
 
-    cursor = connection.cursor(cursor_factory=RealDictCursor)
+    cursor = connection.cursor()
     try:
         cursor.execute("SELECT * FROM activities")
         activities = cursor.fetchall()
@@ -508,7 +503,7 @@ def get_rangers():
         return jsonify({"error": "Database connection failed"}), 500
 
     try:
-        cursor = connection.cursor(cursor_factory=RealDictCursor)
+        cursor = connection.cursor()
         
         # 1. Obtener ID del rol Ranger
         cursor.execute("SELECT id FROM user_roles WHERE role_name = 'Ranger'")
@@ -632,9 +627,6 @@ def create_reservation():
     finally:
         cursor.close()
         connection.close()
-
-# Add this new route to the Flask app
-
         
 # Endpoint para Rangers
 @app.route('/trips/ranger/<uuid:user_id>', methods=['GET'])
@@ -688,7 +680,6 @@ def get_explorer_trips(user_id):
 
 @app.route('/reservations/explorer/<uuid:user_id>', methods=['GET'])
 def get_reservations_explorer(user_id):
-
     connection = get_db_connection()
     if not connection:
         return jsonify({"message": "Error de conexión con la base de datos"}), 500
@@ -744,7 +735,7 @@ def get_reservations_by_user(user_id):
     if not connection:
         return jsonify({"message": "Error de conexión con la base de datos"}), 500
 
-    cursor = connection.cursor()  # Using RealDictCursor from get_db_connection
+    cursor = connection.cursor()
     try:
         # Convertir el user_id a UUID (manejar error si el formato es incorrecto)
         try:
@@ -856,12 +847,6 @@ def delete_reservation_by_trip_user(trip_id, user_id):
     finally:
         cursor.close()
         connection.close()
-        
-@app.route('/', defaults={'path': ''}, methods=['OPTIONS'])
-@app.route('/<path:path>', methods=['OPTIONS'])
-def options_handler(path):
-    response = app.make_default_options_response()
-    return response
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", debug=True, port=5000)
