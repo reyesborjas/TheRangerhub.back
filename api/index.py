@@ -1227,12 +1227,8 @@ def get_trip_resources(trip_id):
         cursor.close()
         connection.close()
 
-from flask import Blueprint, jsonify
-from sqlalchemy.sql import text
-from database import get_db_connection
 
-# Crear un blueprint para las rutas de reservaciones
-reservations_bp = Blueprint('reservations', __name__)
+
 
 @reservations_bp.route('/reservations/trip/<string:trip_id>/explorers', methods=['GET'])
 def get_trip_explorers(trip_id):
