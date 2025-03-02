@@ -327,6 +327,8 @@ def associate_activity_trip():
         logging.error(f"Error general: {str(e)}")
         return jsonify({"message": "Error procesando la solicitud"}), 500
 
+
+
 @app.route('/activitycategory', methods=['GET'])  
 def get_activity_categories():  
     """Obtiene todas las categorías de actividades"""  
@@ -1097,6 +1099,129 @@ def update_resource(resource_id):
     except Exception as e:
         logging.error(f"Error updating resource: {str(e)}")
         connection.rollback()
+        return jsonify({"message": f"Error interno del servidor: {str(e)}"}), 500
+    finally:
+        cursor.close()
+        connection.close()
+
+@app.route('/trips-resources', methods=['POST'])
+def create_trip_resource_association():
+    """Crea una asociación entre un viaje y un recurso"""
+    logging.info("Attempting to create a trip-resource association")
+    connection = get_db_connection()
+    if not connection:
+        return jsonify({"message": "Error de conexión con la base de datos"}), 500
+    
+    cursor = connection.cursor()
+    try:
+        # Get request body
+        body = request.get_json()
+        if not body:
+            return jsonify({"message": "No se proporcionaron datos"}), 400
+        
+        # Check required fields
+        required_fields = ['trip_id', 'resource_id']
+        for field in required_fields:
+            if field not in body:
+                return jsonify({"message": f"Campo requerido faltante: {field}"}), 400
+        
+        # Validate UUID formats
+        try:
+            trip_id = uuid.UUID(body["trip_id"])
+            resource_id = uuid.UUID(body["resource_id"])
+        except ValueError:
+            return jsonify({"message": "Formato de UUID inválido"}), 400
+            
+        # Check if trip exists
+        cursor.execute("SELECT 1 FROM trips WHERE id = %s", (str(trip_id),))
+        if not cursor.fetchone():
+            return jsonify({"message": "El viaje especificado no existe"}), 404
+            
+        # Check if resource exists
+        cursor.execute("SELECT 1 FROM resources WHERE id = %s", (str(resource_id),))
+        if not cursor.fetchone():
+            return jsonify({"message": "El recurso especificado no existe"}), 404
+        
+        # Check if association already exists
+        cursor.execute("""
+            SELECT 1 FROM trip_resources 
+            WHERE trip_id = %s AND resource_id = %s
+        """, (str(trip_id), str(resource_id)))
+        
+        if cursor.fetchone():
+            return jsonify({"message": "Esta asociación ya existe"}), 409
+            
+        # Create the association
+        cursor.execute("""
+            INSERT INTO trip_resources (trip_id, resource_id)
+            VALUES (%s, %s)
+            RETURNING id
+        """, (
+            str(trip_id),
+            str(resource_id)
+        ))
+        
+        association_id = cursor.fetchone()["id"]
+        connection.commit()
+        
+        logging.info(f"Successfully created trip-resource association with ID: {association_id}")
+        return jsonify({
+            "message": "Asociación entre viaje y recurso creada correctamente",
+            "id": str(association_id)
+        }), 201
+        
+    except psycopg2.IntegrityError as e:
+        logging.error(f"Integrity error: {str(e)}")
+        connection.rollback()
+        return jsonify({"message": "Error de integridad en la base de datos"}), 400
+        
+    except Exception as e:
+        logging.error(f"Error creating trip-resource association: {str(e)}")
+        connection.rollback()
+        return jsonify({"message": f"Error interno del servidor: {str(e)}"}), 500
+    finally:
+        cursor.close()
+        connection.close()
+@app.route('/trips/<string:trip_id>/resources', methods=['GET'])
+def get_trip_resources(trip_id):
+    """Obtiene todos los recursos asociados a un viaje específico"""
+    logging.info(f"Fetching resources for trip ID: {trip_id}")
+    connection = get_db_connection()
+    if not connection:
+        return jsonify({"message": "Error de conexión con la base de datos"}), 500
+    
+    cursor = connection.cursor()
+    try:
+        # Validate UUID format
+        try:
+            trip_uuid = uuid.UUID(trip_id)
+        except ValueError:
+            return jsonify({"message": "Formato de UUID inválido"}), 400
+            
+        # First check if trip exists
+        cursor.execute("SELECT trip_name FROM trips WHERE id = %s", (str(trip_uuid),))
+        trip = cursor.fetchone()
+        if not trip:
+            return jsonify({"message": "El viaje no existe"}), 404
+            
+        # Query trip resources with resource details
+        cursor.execute("""
+            SELECT r.id, r.name, r.description, r.cost, tr.id as association_id
+            FROM trip_resources tr
+            JOIN resources r ON tr.resource_id = r.id
+            WHERE tr.trip_id = %s
+        """, (str(trip_uuid),))
+        
+        resources = cursor.fetchall()
+        
+        return jsonify({
+            "trip_id": trip_id,
+            "trip_name": trip["trip_name"],
+            "resources": resources
+        }), 200
+        
+    except Exception as e:
+        logging.error(f"Error getting trip resources: {str(e)}")
         return jsonify({"message": f"Error interno del servidor: {str(e)}"}), 500
     finally:
         cursor.close()
