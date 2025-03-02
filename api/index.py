@@ -249,10 +249,10 @@ def get_all_activities():
         cursor.execute("SELECT * FROM activities")
         activities = cursor.fetchall()
 
-        if not activities:
-            return jsonify({"message": "No hay actividades disponibles"}), 404
+        # Convertir UUID a strings
+        activities_converted = [dict(activity, id=str(activity['id'])) for activity in activities]
 
-        return jsonify({"activities": activities}), 200
+        return jsonify({"activities": activities_converted}), 200
     except Exception as e:
         logging.error(f"Error al obtener actividades: {e}")
         return jsonify({"message": "Error interno del servidor"}), 500
@@ -568,15 +568,15 @@ def get_resources():
     if not connection:  
         return jsonify({"message": "Error de conexión con la base de datos"}), 500  
 
-    cursor = connection.cursor()
+    cursor = connection.cursor(cursor_factory=RealDictCursor)
     try:  
         cursor.execute("SELECT * FROM resources")  
         resources = cursor.fetchall()  
 
-        if not resources:  
-            return jsonify({"message": "No hay recursos disponibles"}), 404  
+        # Convertir UUID a strings
+        resources_converted = [dict(resource, id=str(resource['id'])) for resource in resources]
 
-        return jsonify({"resources": resources}), 200  
+        return jsonify({"resources": resources_converted}), 200  
     except Exception as e:  
         logging.error(f"Error al obtener recursos: {e}")  
         return jsonify({"message": "Error al obtener los recursos"}), 500  
