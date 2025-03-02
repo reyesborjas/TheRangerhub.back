@@ -870,22 +870,49 @@ def delete_resource(resource_id):
         cursor.execute("SELECT 1 FROM resources WHERE id = %s", (str(resource_uuid),))
         if not cursor.fetchone():
             return jsonify({"message": "Recurso no encontrado"}), 404
+        
+        # Begin transaction
+        connection.autocommit = False
+        
+        # Check if resource is referenced in trip_resources
+        cursor.execute("SELECT COUNT(*) FROM trip_resources WHERE resource_id = %s", (str(resource_uuid),))
+        references_count = cursor.fetchone()['count']
+        
+        if references_count > 0:
+            # Option 1: Return error informing that the resource is in use
+            return jsonify({
+                "message": f"No se puede eliminar el recurso porque está siendo utilizado en {references_count} viaje(s)",
+                "references": references_count
+            }), 409
             
+            # Option 2 (Uncomment to use): Delete all references first, then delete the resource
+            # cursor.execute("DELETE FROM trip_resources WHERE resource_id = %s", (str(resource_uuid),))
+            # logging.info(f"Deleted {references_count} references from trip_resources")
+        
         # Delete the resource
         cursor.execute("DELETE FROM resources WHERE id = %s RETURNING id", (str(resource_uuid),))
         deleted = cursor.fetchone()
+        
+        # Commit transaction
         connection.commit()
         
         logging.info(f"Successfully deleted resource: {resource_id}")
         return jsonify({"message": "Recurso eliminado correctamente", "id": str(deleted["id"])}), 200
         
     except Exception as e:
+        # Rollback in case of error
+        if connection:
+            connection.rollback()
         logging.error(f"Error deleting resource: {str(e)}")
         return jsonify({"message": f"Error interno del servidor: {str(e)}"}), 500
     finally:
-        cursor.close()
-        connection.close()
-
+        if cursor:
+            cursor.close()
+        if connection:
+            # Reset autocommit
+            connection.autocommit = True
+            connection.close()
+            
 @app.route('/resources/<string:resource_id>', methods=['PUT'])
 def update_resource(resource_id):
     """Actualiza un recurso por su ID"""
