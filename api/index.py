@@ -860,7 +860,10 @@ def get_explorers_by_trip(trip_id):
         return jsonify({"error": "No se pudo conectar a la base de datos"}), 500
 
     try:
-        with connection.cursor() as cursor:
+       
+        with connection.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
+         
+            
             query = """
                 SELECT 
                     users.id, 
@@ -873,28 +876,38 @@ def get_explorers_by_trip(trip_id):
                 WHERE reservations.trip_id = %s;
             """
             cursor.execute(query, (trip_id,))
-            explorers = cursor.fetchall()
+            explorers_data = cursor.fetchall()
+            
+            # Convertir a lista de diccionarios planos para asegurar serialización JSON correcta
+            explorers = []
+            for explorer in explorers_data:
+                # Si ya es un diccionario (con RealDictCursor/DictCursor)
+                if hasattr(explorer, 'items'):
+                    explorer_dict = dict(explorer)
+                else:
+                    # Si es una tupla (con cursor estándar)
+                    explorer_dict = {
+                        "id": explorer[0],
+                        "name": explorer[1],
+                        "email": explorer[2],
+                        "phone": explorer[3],
+                        "status": explorer[4]
+                    }
+                
+                # Convertir UUID a string si es necesario
+                if isinstance(explorer_dict.get('id'), (uuid.UUID)):
+                    explorer_dict['id'] = str(explorer_dict['id'])
+                
+                explorers.append(explorer_dict)
 
-            if not explorers:
-                logging.warning(f"No se encontraron exploradores para el trip_id: {trip_id}")
-                return jsonify({"explorers": []}), 200  # Cambio: devolver array vacío en lugar de error 404
-
-            # Convertir los resultados en lista de diccionarios para asegurar formato JSON correcto
-            explorer_list = []
-            for explorer in explorers:
-                explorer_list.append({
-                    "id": explorer[0],
-                    "name": explorer[1],
-                    "email": explorer[2],
-                    "phone": explorer[3],  # Cambiado a "phone" para coincidir con el frontend
-                    "status": explorer[4]
-                })
-
-            return jsonify({"explorers": explorer_list}), 200
+            # Agregar log para depuración
+            logging.info(f"Datos de exploradores obtenidos: {explorers}")
+            
+            return jsonify({"explorers": explorers}), 200
 
     except Exception as e:
-        logging.error(f"Error en la consulta SQL: {e}")
-        return jsonify({"error": "Error interno del servidor"}), 500
+        logging.error(f"Error en la consulta SQL: {str(e)}")
+        return jsonify({"error": "Error interno del servidor", "details": str(e)}), 500
 
     finally:
         connection.close()
