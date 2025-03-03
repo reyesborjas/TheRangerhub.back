@@ -418,7 +418,7 @@ def get_locations():
         cursor.close()
         connection.close()
 
-@app.route('/trips', methods=['POST'])
+@app.route('/trips', methods=['POST','PUT'])
 def create_trip():
     connection = get_db_connection()
     if not connection:
