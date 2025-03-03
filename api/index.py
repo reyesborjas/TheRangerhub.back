@@ -444,14 +444,22 @@ def get_locations():
         connection.close()
 
 @app.route('/trips', methods=['POST'])
-def create_trip():
+def create_or_update_trip():
     connection = get_db_connection()
     if not connection:
         return jsonify({"message": "Error de conexión con la base de datos"}), 500
 
     cursor = connection.cursor()
     try:
-        body = request.get_json()
+        # Obtener datos del cuerpo de la solicitud
+        # Acepta tanto JSON como form-data
+        if request.is_json:
+            body = request.get_json()
+        else:
+            body = request.form.to_dict()
+        
+        # Verificar si estamos actualizando un viaje existente
+        trip_id = body.get('id')
         
         # Validar campos requeridos
         required_fields = ['trip_name', 'lead_ranger', 'start_date', 'end_date']
@@ -459,40 +467,81 @@ def create_trip():
             if field not in body:
                 return jsonify({"message": f"Campo requerido faltante: {field}"}), 400
 
-        # Insertar con todos los campos correctos
-        cursor.execute("""
-            INSERT INTO trips (
-                trip_name, start_date, end_date, participants_number,
-                trip_status, estimated_weather_forecast, description,
-                total_cost, trip_image_url, lead_ranger
-            ) 
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-            RETURNING id
-        """, (
-            body.get("trip_name"),
-            body.get("start_date"),
-            body.get("end_date"),
-            body.get("participants_number", 0),
-            body.get("trip_status", "pending"),
-            body.get("estimated_weather_forecast", ""),
-            body.get("description", ""),
-            body.get("total_cost", 0),
-            body.get("trip_image_url", ""),
-            body["lead_ranger"]  
-        ))
+        if trip_id:
+            # ACTUALIZAR VIAJE EXISTENTE
+            cursor.execute("""
+                UPDATE trips SET
+                    trip_name = %s,
+                    start_date = %s,
+                    end_date = %s,
+                    participants_number = %s,
+                    trip_status = %s,
+                    estimated_weather_forecast = %s,
+                    description = %s,
+                    total_cost = %s,
+                    trip_image_url = %s,
+                    lead_ranger = %s
+                WHERE id = %s
+                RETURNING id
+            """, (
+                body.get("trip_name"),
+                body.get("start_date"),
+                body.get("end_date"),
+                body.get("participants_number", 0),
+                body.get("trip_status", "pending"),
+                body.get("estimated_weather_forecast", ""),
+                body.get("description", ""),
+                body.get("total_cost", 0),
+                body.get("trip_image_url", ""),
+                body.get("lead_ranger"),
+                trip_id
+            ))
+            
+            result = cursor.fetchone()
+            if not result:
+                return jsonify({"message": f"No se encontró un viaje con ID {trip_id}"}), 404
+                
+            connection.commit()
+            
+            return jsonify({
+                "message": "Viaje actualizado exitosamente",
+                "id": str(trip_id)
+            }), 200
+        else:
+            # CREAR NUEVO VIAJE
+            cursor.execute("""
+                INSERT INTO trips (
+                    trip_name, start_date, end_date, participants_number,
+                    trip_status, estimated_weather_forecast, description,
+                    total_cost, trip_image_url, lead_ranger
+                ) 
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                RETURNING id
+            """, (
+                body.get("trip_name"),
+                body.get("start_date"),
+                body.get("end_date"),
+                body.get("participants_number", 0),
+                body.get("trip_status", "pending"),
+                body.get("estimated_weather_forecast", ""),
+                body.get("description", ""),
+                body.get("total_cost", 0),
+                body.get("trip_image_url", ""),
+                body.get("lead_ranger")
+            ))
 
-        trip_row = cursor.fetchone()
-        trip_id = trip_row["id"]
-        connection.commit()
-        
-        return jsonify({
-            "message": "Viaje creado exitosamente",
-            "id": str(trip_id)
-        }), 201
+            trip_row = cursor.fetchone()
+            new_trip_id = trip_row["id"]
+            connection.commit()
+            
+            return jsonify({
+                "message": "Viaje creado exitosamente",
+                "id": str(new_trip_id)
+            }), 201
 
     except Exception as e:
-        logging.error(f"Error en creación de viaje: {str(e)}")
-        return jsonify({"message": "Error interno del servidor"}), 500
+        logging.error(f"Error en operación de viaje: {str(e)}")
+        return jsonify({"message": f"Error interno del servidor: {str(e)}"}), 500
     finally:
         cursor.close()
         connection.close()
