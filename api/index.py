@@ -474,7 +474,7 @@ def create_or_update_trip():
                     trip_name = %s,
                     start_date = %s,
                     end_date = %s,
-                    participants_number = %s,
+                    max_participants_number = %s,
                     trip_status = %s,
                     estimated_weather_forecast = %s,
                     description = %s,

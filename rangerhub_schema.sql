@@ -33,7 +33,7 @@ CREATE TABLE trips (
     id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
     start_date timestamptz NOT NULL,
     end_date timestamptz NOT NULL,
-    participants_number integer NOT NULL,
+    max_participants_number integer NOT NULL,
     trip_status VARCHAR(50) NOT NULL DEFAULT 'pendiente',
     estimated_weather_forecast text,
     description text ,
