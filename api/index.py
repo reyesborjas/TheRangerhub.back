@@ -824,8 +824,7 @@ def delete_reservation_by_trip_user(trip_id, user_id):
     connection = get_db_connection()
     if not connection:
         return jsonify({"message": "Error de conexión con la base de datos"}), 500
-    
-    cursor = connection.cursor()
+        cursor = connection.cursor()
     try:
         # Try to find and delete by both trip_id and user_id
         cursor.execute(
@@ -849,39 +848,9 @@ def delete_reservation_by_trip_user(trip_id, user_id):
     finally:
         cursor.close()
         connection.close()
-        
+    
 
-    """Obtiene la lista de exploradores registrados en un viaje específico"""
-    connection = get_db_connection()
-    if not connection:
-        logging.error("No se pudo conectar a la base de datos")
-        return jsonify({"error": "No se pudo conectar a la base de datos"}), 500
-
-    try:
-        with connection.cursor() as cursor:
-            query = """
-                SELECT 
-                    users.id, users.name, users.email, users.phone_number, reservations.status
-                FROM reservations
-                JOIN users ON reservations.user_id = users.id
-                WHERE reservations.trip_id = %s;
-            """
-            cursor.execute(query, (trip_id,))
-            explorers = cursor.fetchall()
-
-            if not explorers:
-                logging.warning(f"No se encontraron exploradores para el trip_id: {trip_id}")
-                return jsonify({"error": "No hay exploradores registrados para este viaje"}), 404
-
-            return jsonify({"explorers": explorers}), 200
-
-    except Exception as e:
-        logging.error(f"Error en la consulta SQL: {e}")
-        return jsonify({"error": "Error interno del servidor"}), 500
-
-    finally:
-        connection.close()
-
+    
 @app.route('/reservations/trip/<trip_id>/explorers', methods=['GET'])
 def get_explorers_by_trip(trip_id):
     """Obtiene la lista de exploradores registrados en un viaje específico"""
