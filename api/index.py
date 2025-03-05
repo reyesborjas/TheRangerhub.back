@@ -1370,14 +1370,26 @@ def get_trip_resources(trip_id):
 def delete_activity_trip(trip_id, activity_id):
     try:
         conn = get_db_connection()
-        cur = conn.cursor(cursor_factory=RealDictCursor)  # ¡Aquí se llama 'cur', no 'cursor'!
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        
+        # Imprimir valores para depuración
+        print(f"Intentando eliminar relación entre viaje {trip_id} y actividad {activity_id}")
         
         # Validar UUIDs
         try:
-            uuid.UUID(trip_id)
-            uuid.UUID(activity_id)
+            uuid_trip = uuid.UUID(trip_id)
+            uuid_activity = uuid.UUID(activity_id)
+            print(f"UUIDs válidos: {uuid_trip} y {uuid_activity}")
         except ValueError:
             return jsonify({"message": "IDs inválidos"}), 400
+        
+        # Verificar si existe la relación
+        cur.execute(
+            "SELECT id FROM activity_trips WHERE trip_id = %s AND activity_id = %s",
+            (trip_id, activity_id)
+        )
+        existing = cur.fetchone()
+        print(f"¿Existe la relación antes de eliminar? {existing is not None}")
         
         # Ejecutar la consulta de eliminación
         cur.execute(
@@ -1386,6 +1398,19 @@ def delete_activity_trip(trip_id, activity_id):
         )
         
         deleted_row = cur.fetchone()
+        print(f"Resultado de la eliminación: {deleted_row}")
+        
+        # Forzar commit explícitamente
+        conn.commit()
+        
+        # Verificar después de la eliminación
+        cur.execute(
+            "SELECT id FROM activity_trips WHERE trip_id = %s AND activity_id = %s",
+            (trip_id, activity_id)
+        )
+        check_after = cur.fetchone()
+        print(f"¿Existe la relación después de eliminar? {check_after is not None}")
+        
         cur.close()
         conn.close()
         
@@ -1400,6 +1425,7 @@ def delete_activity_trip(trip_id, activity_id):
             cur.close()
         if 'conn' in locals() and conn is not None:
             conn.close()
+        print(f"Error al eliminar: {str(e)}")
         return jsonify({"message": f"Error al eliminar la actividad: {str(e)}"}), 500
 
 if __name__ == "__main__":
