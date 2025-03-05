@@ -337,10 +337,11 @@ def get_trip_activities(trip_id):
     try:
         # Consulta para obtener actividades asociadas a un viaje específico
         cursor.execute("""
-            SELECT a.* 
-            FROM activities a
-            JOIN activity_trips at ON a.id = at.activity_id
-            WHERE at.trip_id = %s
+           SELECT a.*, lo.* 
+           FROM activities a
+           JOIN activity_trips at ON a.id = at.activity_id
+           join locations lo on a.location_id = lo.id
+           WHERE at.trip_id = %s
         """, (trip_id,))
         
         activities = cursor.fetchall()
