@@ -1366,6 +1366,37 @@ def get_trip_resources(trip_id):
     finally:
         cursor.close()
         connection.close()
+        
+@app.route('/activity-trips/<trip_id>/<activity_id>', methods=['DELETE'])
+def delete_activity_trip(trip_id, activity_id):
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        
+        # Validar UUIDs
+        try:
+            uuid.UUID(trip_id)
+            uuid.UUID(activity_id)
+        except ValueError:
+            return jsonify({"message": "IDs inválidos"}), 400
+        
+        # Ejecutar la consulta de eliminación
+        cur.execute(
+            "DELETE FROM activity_trips WHERE trip_id = %s AND activity_id = %s RETURNING id",
+            (trip_id, activity_id)
+        )
+        
+        deleted_row = cur.fetchone()
+        cur.close()
+        conn.close()
+        
+        if deleted_row:
+            return jsonify({"message": "Actividad eliminada del viaje exitosamente"}), 200
+        else:
+            return jsonify({"message": "No se encontró la relación entre esa actividad y ese viaje"}), 404
+            
+    except Exception as e:
+        return jsonify({"message": f"Error al eliminar la actividad: {str(e)}"}), 500
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", debug=True, port=5000)
