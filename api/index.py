@@ -327,7 +327,34 @@ def associate_activity_trip():
         logging.error(f"Error general: {str(e)}")
         return jsonify({"message": "Error procesando la solicitud"}), 500
 
+@app.route('/trips/<trip_id>/activities', methods=['GET'])
+def get_trip_activities(trip_id):
+    connection = get_db_connection()
+    if not connection:
+        return jsonify({"message": "Error de conexión con la base de datos"}), 500
 
+    cursor = connection.cursor(cursor_factory=RealDictCursor)
+    try:
+        # Consulta para obtener actividades asociadas a un viaje específico
+        cursor.execute("""
+            SELECT a.* 
+            FROM activities a
+            JOIN activity_trips at ON a.id = at.activity_id
+            WHERE at.trip_id = %s
+        """, (trip_id,))
+        
+        activities = cursor.fetchall()
+
+        # Convertir UUID a strings
+        activities_converted = [dict(activity, id=str(activity['id'])) for activity in activities]
+
+        return jsonify({"activities": activities_converted}), 200
+    except Exception as e:
+        logging.error(f"Error al obtener actividades del viaje: {e}")
+        return jsonify({"message": "Error interno del servidor"}), 500
+    finally:
+        cursor.close()
+        connection.close()
 
 @app.route('/activitycategory', methods=['GET'])  
 def get_activity_categories():  
