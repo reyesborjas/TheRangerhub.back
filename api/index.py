@@ -101,7 +101,7 @@ def get_roles():
 
     cursor = connection.cursor()
     try:
-        cursor.execute("SELECT * FROM user_roles")
+        cursor.execute("SELECT * FROM user_roles where role_name != 'Admin'")
         roles = cursor.fetchall()
         if not roles:
             return jsonify({"message": "No hay roles disponibles"}), 404
