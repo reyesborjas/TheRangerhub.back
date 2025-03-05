@@ -487,7 +487,7 @@ def create_or_update_trip():
                 body.get("trip_name"),
                 body.get("start_date"),
                 body.get("end_date"),
-                body.get("participants_number", 0),
+                body.get("max_participants_number", 0),
                 body.get("trip_status", "pending"),
                 body.get("estimated_weather_forecast", ""),
                 body.get("description", ""),
@@ -511,7 +511,7 @@ def create_or_update_trip():
             # CREAR NUEVO VIAJE
             cursor.execute("""
                 INSERT INTO trips (
-                    trip_name, start_date, end_date, participants_number,
+                    trip_name, start_date, end_date, max_participants_number,
                     trip_status, estimated_weather_forecast, description,
                     total_cost, trip_image_url, lead_ranger
                 ) 
@@ -521,7 +521,7 @@ def create_or_update_trip():
                 body.get("trip_name"),
                 body.get("start_date"),
                 body.get("end_date"),
-                body.get("participants_number", 0),
+                body.get("max_participants_number", 0),
                 body.get("trip_status", "pending"),
                 body.get("estimated_weather_forecast", ""),
                 body.get("description", ""),
