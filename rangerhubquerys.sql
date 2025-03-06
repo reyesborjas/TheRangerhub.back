@@ -21,19 +21,20 @@ INSERT INTO activity_categories (name, description) VALUES
 ('Montañismo', 'Actividades de ascenso en montañas y volcanes'),
 ('Trekking', 'Caminatas por senderos naturales'),
 ('Escalada', 'Actividades de escalada en roca y hielo');
+('Rafting', 'Bajada en balsa por el río Maipo')
 
 -- Insertar actividades
 INSERT INTO activities (category_id, location_id, name, description, duration, difficulty, min_participants, max_participants, cancellation_policy, cost) VALUES
 ((SELECT id FROM activity_categories WHERE name = 'Montañismo'), (SELECT id FROM locations WHERE place_name = 'Volcán Villarrica'), 'Ascenso Villarrica', 'Ascenso guiado al volcán Villarrica', 8.5, 'difícil', 2, 8, 'Cancelación gratuita con 48 horas de anticipación', 150000.00),
 ((SELECT id FROM activity_categories WHERE name = 'Trekking'), (SELECT id FROM locations WHERE place_name = 'Torres del Paine'), 'Circuito W', 'Trekking por el famoso circuito W', 24.0, 'moderado', 4, 12, 'Cancelación gratuita con 72 horas de anticipación', 280000.00),
 ((SELECT id FROM activity_categories WHERE name = 'Escalada'), (SELECT id FROM locations WHERE place_name = 'Valle Nevado'), 'Escalada en Hielo', 'Curso básico de escalada en hielo', 6.0, 'intermedio', 2, 6, 'Cancelación gratuita con 24 horas de anticipación', 120000.00);
-
+((SELECT id FROM activity_categories WHERE name = 'Rafting'), (SELECT id FROM locations WHERE place_name = 'Cajon del Maipo'), 'Rafting', 'Bajada en balsa por el río Maipo', 3.0, 'moderada', 4, 8, 'Cancelación gratuita con 48 horas de anticipación', 100.00);
 -- Insertar viajes
 INSERT INTO trips (start_date, end_date, participants_number, trip_status, description, total_cost) VALUES
 ('2025-03-15 08:00:00-03', '2025-03-15 18:00:00-03', 6, 'confirmado', 'Ascenso al Volcán Villarrica', 900000.00),
 ('2025-04-01 07:00:00-03', '2025-04-05 19:00:00-03', 8, 'pendiente', 'Trekking Circuito W en Torres del Paine', 2240000.00),
 ('2025-02-20 09:00:00-03', '2025-02-20 16:00:00-03', 4, 'confirmado', 'Curso de escalada en hielo en Valle Nevado', 480000.00);
-
+('2025-07-30 10:30:00-03', '2025-07-30 14:00:00-03', 6, 'pendiente', 'Bajada en balsa por el río Maipo', 80000.00);
 -- Insertar reservaciones
 INSERT INTO reservations (trip_id, user_id, status) VALUES
 ((SELECT id FROM trips WHERE description LIKE '%Villarrica%'), (SELECT id FROM users WHERE username = 'mariasanchez'), 'confirmado'),
@@ -63,6 +64,7 @@ INSERT INTO activity_trips (activity_id, trip_id) VALUES
 ((SELECT id FROM activities WHERE name = 'Ascenso Villarrica'), (SELECT id FROM trips WHERE description LIKE '%Villarrica%')),
 ((SELECT id FROM activities WHERE name = 'Circuito W'), (SELECT id FROM trips WHERE description LIKE '%Torres del Paine%')),
 ((SELECT id FROM activities WHERE name = 'Escalada en Hielo'), (SELECT id FROM trips WHERE description LIKE '%Valle Nevado%'));
+((SELECT id FROM activities WHERE name = 'Rafting') ,(SELECT id FROM trips WHERE description LIKE '%Cajón del Maipo%'));
 
 -- Insertar certificaciones
 INSERT INTO certifications (issued_by, issued_date, valid_until, certification_number, title) VALUES
