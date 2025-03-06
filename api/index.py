@@ -900,7 +900,10 @@ def delete_reservation_by_trip_user(trip_id, user_id):
     connection = get_db_connection()
     if not connection:
         return jsonify({"message": "Error de conexión con la base de datos"}), 500
-        cursor = connection.cursor()
+    
+    # Corrección: Mueve esta línea fuera del bloque condicional
+    cursor = connection.cursor()
+    
     try:
         # Try to find and delete by both trip_id and user_id
         cursor.execute(
@@ -919,6 +922,7 @@ def delete_reservation_by_trip_user(trip_id, user_id):
         return jsonify({"message": "Reserva eliminada correctamente"}), 200
     
     except Exception as e:
+        connection.rollback()  # Añade rollback en caso de error
         logging.error(f"Error deleting reservation: {str(e)}")
         return jsonify({"message": f"Error interno del servidor: {str(e)}"}), 500
     finally:
