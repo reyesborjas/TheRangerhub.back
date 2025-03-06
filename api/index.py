@@ -259,6 +259,145 @@ def get_all_activities():
     finally:
         cursor.close()
         connection.close()
+        
+@app.route('/activities/<activity_id>', methods=['PUT'])
+def update_activity(activity_id):
+    connection = get_db_connection()
+    if not connection:
+        return jsonify({"message": "Error de conexión con la base de datos"}), 500
+
+    cursor = connection.cursor()
+    try:
+        if request.method == 'PUT':
+            body = request.get_json()
+            if not body:
+                return jsonify({"message": "No se proporcionaron datos"}), 400
+
+            # Validar tipos de datos
+            try:
+                duration = float(body.get("duration", 0))
+                min_participants = int(body.get("min_participants", 0))
+                max_participants = int(body.get("max_participants", 0))
+                cost = float(body.get("cost", 0))
+            except (ValueError, TypeError) as e:
+                return jsonify({"message": f"Error en los tipos de datos: {str(e)}"}), 400
+
+            # Actualización de la actividad en la tabla activities
+            cursor.execute("""
+                UPDATE activities SET
+                    category_id = COALESCE(%s, category_id),
+                    location_id = COALESCE(%s, location_id),
+                    name = COALESCE(%s, name),
+                    description = COALESCE(%s, description),
+                    duration = COALESCE(%s, duration),
+                    difficulty = COALESCE(%s, difficulty),
+                    min_participants = COALESCE(%s, min_participants),
+                    max_participants = COALESCE(%s, max_participants),
+                    is_available = COALESCE(%s, is_available),
+                    is_public = COALESCE(%s, is_public),
+                    cost = COALESCE(%s, cost),
+                    activity_image_url = COALESCE(%s, activity_image_url)
+                WHERE id = %s
+                RETURNING *
+            """, (
+                body.get("category_id"), body.get("location_id"), body.get("name"), 
+                body.get("description"), duration if "duration" in body else None, 
+                body.get("difficulty"), 
+                min_participants if "min_participants" in body else None, 
+                max_participants if "max_participants" in body else None, 
+                body.get("is_available"), 
+                body.get("is_public"), 
+                cost if "cost" in body else None, 
+                body.get("activity_image_url"),
+                activity_id
+            ))
+
+            updated_activity = cursor.fetchone()
+            
+            if not updated_activity:
+                return jsonify({"message": "Actividad no encontrada"}), 404
+                
+            connection.commit()
+            
+            # Convertir el resultado a un diccionario
+            if isinstance(updated_activity, dict):
+                # Ya es un diccionario, solo convertir UUID a string si es necesario
+                if 'id' in updated_activity and updated_activity['id']:
+                    updated_activity['id'] = str(updated_activity['id'])
+            else:
+                # Convertir a diccionario utilizando nombres de columnas
+                columns = [desc[0] for desc in cursor.description]
+                updated_activity = dict(zip(columns, updated_activity))
+                if 'id' in updated_activity and updated_activity['id']:
+                    updated_activity['id'] = str(updated_activity['id'])
+
+            return jsonify({
+                "message": "Actividad actualizada correctamente",
+                "activity": updated_activity
+            }), 200
+    
+    except psycopg2.IntegrityError as e:
+        logging.error(f"Error al actualizar la actividad: {e}")
+        return jsonify({"message": "Error al actualizar la actividad: posible violación de restricción"}), 400
+    
+    except Exception as e:
+        logging.error(f"Error al actualizar la actividad: {e}")
+        return jsonify({"message": f"Error al actualizar la actividad: {str(e)}"}), 500
+    finally:
+        cursor.close()
+        connection.close()
+
+# También necesitarás una ruta GET individual para obtener una sola actividad
+@app.route('/activities/<activity_id>', methods=['GET'])
+def get_activity(activity_id):
+    connection = get_db_connection()
+    if not connection:
+        return jsonify({"message": "Error de conexión con la base de datos"}), 500
+
+    cursor = connection.cursor(cursor_factory=RealDictCursor)
+    try:
+        cursor.execute("SELECT * FROM activities WHERE id = %s", (activity_id,))
+        activity = cursor.fetchone()
+
+        if not activity:
+            return jsonify({"message": "Actividad no encontrada"}), 404
+
+        # Convertir UUID a string
+        activity['id'] = str(activity['id'])
+
+        return jsonify({"activity": activity}), 200
+    except Exception as e:
+        logging.error(f"Error al obtener la actividad: {e}")
+        return jsonify({"message": f"Error interno del servidor: {str(e)}"}), 500
+    finally:
+        cursor.close()
+        connection.close()
+
+
+# Ya tienes la ruta DELETE, pero si no la tuvieras, aquí está cómo podría ser
+@app.route('/activities/<activity_id>', methods=['DELETE'])
+def delete_activity(activity_id):
+    connection = get_db_connection()
+    if not connection:
+        return jsonify({"message": "Error de conexión con la base de datos"}), 500
+
+    cursor = connection.cursor()
+    try:
+        cursor.execute("DELETE FROM activities WHERE id = %s RETURNING id", (activity_id,))
+        deleted = cursor.fetchone()
+        
+        if not deleted:
+            return jsonify({"message": "Actividad no encontrada"}), 404
+            
+        connection.commit()
+        return jsonify({"message": "Actividad eliminada correctamente"}), 200
+    
+    except Exception as e:
+        logging.error(f"Error al eliminar la actividad: {e}")
+        return jsonify({"message": f"Error al eliminar la actividad: {str(e)}"}), 500
+    finally:
+        cursor.close()
+        connection.close()
             
 @app.route('/activity-trips', methods=['POST'])
 def associate_activity_trip():
