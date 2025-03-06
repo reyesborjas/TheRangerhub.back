@@ -34,7 +34,7 @@ INSERT INTO trips (start_date, end_date, participants_number, trip_status, descr
 ('2025-03-15 08:00:00-03', '2025-03-15 18:00:00-03', 6, 'confirmado', 'Ascenso al Volcán Villarrica', 900000.00),
 ('2025-04-01 07:00:00-03', '2025-04-05 19:00:00-03', 8, 'pendiente', 'Trekking Circuito W en Torres del Paine', 2240000.00),
 ('2025-02-20 09:00:00-03', '2025-02-20 16:00:00-03', 4, 'confirmado', 'Curso de escalada en hielo en Valle Nevado', 480000.00);
-('2025-07-30 10:30:00-03', '2025-07-30 14:00:00-03', 6, 'pendiente', 'Bajada en balsa por el río Maipo', 80000.00);
+
 -- Insertar reservaciones
 INSERT INTO reservations (trip_id, user_id, status) VALUES
 ((SELECT id FROM trips WHERE description LIKE '%Villarrica%'), (SELECT id FROM users WHERE username = 'mariasanchez'), 'confirmado'),
@@ -52,6 +52,7 @@ INSERT INTO resources (name, description, cost) VALUES
 ('Piolet', '{"tipo": "equipo_técnico", "marca": "Black Diamond", "estado": "nuevo"}', 75000.00),
 ('Carpa 4 estaciones', '{"tipo": "equipo_camping", "marca": "The North Face", "capacidad": "2 personas"}', 250000.00),
 ('Crampones', '{"tipo": "equipo_técnico", "marca": "Petzl", "talla": "universal"}', 85000.00);
+('Remo', '{"tipo": "equipo_técnico", "marca": "Xped", "talla": "universal"}', 63000.00);
 
 -- Insertar recursos para viajes
 INSERT INTO trip_resources (resource_id, trip_id) VALUES
