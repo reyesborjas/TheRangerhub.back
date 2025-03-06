@@ -1432,5 +1432,68 @@ def delete_activity_trip(trip_id, activity_id):
         print(f"Error al eliminar: {str(e)}")
         return jsonify({"message": f"Error al eliminar la actividad: {str(e)}"}), 500
 
+@app.route('/payments', methods=['POST'])
+def create_payment():
+    try:
+        # Obtener datos del request
+        data = request.get_json()
+        
+        # Validar datos de entrada
+        user_id = data.get('user_id')
+        trip_id = data.get('trip_id')
+        payment_amount = data.get('payment_amount')
+        payment_method = data.get('payment_method')
+        payment_voucher_url = data.get('payment_voucher_url', None)  # Opcional
+        
+        # Validaciones básicas
+        if not all([user_id, trip_id, payment_amount, payment_method]):
+            return jsonify({"error": "Datos de pago incompletos"}), 400
+        
+        # Establecer conexión a la base de datos
+        connection = get_db_connection()
+        cursor = connection.cursor()
+        
+        # Insertar pago con estado pendiente por defecto
+        cursor.execute("""
+            INSERT INTO payments (
+                user_id, 
+                trip_id, 
+                payment_amount, 
+                payment_method, 
+                payment_date, 
+                payment_voucher_url,
+                payment_status
+            ) VALUES (%s, %s, %s, %s, CURRENT_DATE, %s, 'pending')
+            RETURNING id
+        """, (
+            user_id, 
+            trip_id, 
+            payment_amount, 
+            payment_method,
+            payment_voucher_url
+        ))
+        
+        # Obtener el ID del pago insertado
+        payment_id = cursor.fetchone()[0]
+        
+        # Commit de la transacción
+        connection.commit()
+        
+        return jsonify({
+            "message": "Pago iniciado correctamente", 
+            "payment_id": payment_id
+        }), 201
+    
+    except Exception as e:
+        # Manejo de errores
+        logging.error(f"Error creating payment: {str(e)}")
+        return jsonify({"error": "Error al procesar el pago"}), 500
+    finally:
+        # Cerrar cursor y conexión
+        if 'cursor' in locals():
+            cursor.close()
+        if 'connection' in locals():
+            connection.close()
+
 if __name__ == "__main__":
     app.run(host="0.0.0.0", debug=True, port=5000)
