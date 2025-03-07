@@ -610,6 +610,28 @@ def get_locations():
     finally:
         cursor.close()
         connection.close()
+@app.route('/trips/<uuid:trip_id>/locations', methods=['GET'])
+def get_trip_locations(trip_id):
+    connection = get_db_connection()
+    try:
+        cursor = connection.cursor()
+        
+        # Consulta para obtener todas las ubicaciones asociadas a las actividades de un viaje
+        cursor.execute("""
+            SELECT l.id, l.place_name, l.latitude, l.longitude
+            FROM locations l
+            JOIN activities a ON l.id = a.location_id
+            JOIN activity_trips at ON a.id = at.activity_id
+            WHERE at.trip_id = %s::uuid
+        """, (str(trip_id),))
+        
+        locations = cursor.fetchall()
+        return jsonify({"locations": locations}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        cursor.close()
+        connection.close()
 
 @app.route('/trips', methods=['POST'])
 def create_or_update_trip():
