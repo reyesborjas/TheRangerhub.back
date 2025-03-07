@@ -16,11 +16,6 @@ app = Flask(__name__)
 # Combined CORS configuration
 CORS(app)
 
-from flask import Blueprint, request, jsonify
-from models import Trip, Reservation, ActivityTrip, db
-from auth import auth_required, is_ranger
-
-trips_bp = Blueprint('trips', __name__)
 
 # Add a specific OPTIONS handler - KEEP ONLY THIS ONE
 @app.route('/', defaults={'path': ''}, methods=['OPTIONS'])
@@ -1707,8 +1702,46 @@ def create_payment():
         if 'connection' in locals():
             connection.close()
 
+# trips_endpoints.py
+# Este archivo debe colocarse en la misma ubicación que los otros endpoints de la API
+
+from flask import Blueprint, request, jsonify, current_app
+from flask_jwt_extended import jwt_required, get_jwt_identity
+import sys
+import os
+
+# Estas importaciones deben ajustarse según la estructura real del proyecto
+# Ejemplo para una estructura típica de proyecto Flask
+try:
+    from models import db, Trip, Reservation, ActivityTrip
+except ImportError:
+    try:
+        from api.models import db, Trip, Reservation, ActivityTrip
+    except ImportError:
+        try:
+            from app.models import db, Trip, Reservation, ActivityTrip
+        except ImportError:
+            raise ImportError("No se pudo importar los modelos necesarios. Ajuste las rutas de importación.")
+
+trips_bp = Blueprint('trips', __name__)
+
+# Función para verificar si el usuario es un ranger
+def is_ranger():
+    try:
+        from auth import is_ranger
+        return is_ranger()
+    except ImportError:
+        try:
+            from api.auth import is_ranger
+            return is_ranger()
+        except ImportError:
+            # Implementación alternativa si no se puede importar
+            from flask_jwt_extended import get_jwt_claims
+            claims = get_jwt_claims()
+            return claims.get('role') == 'Ranger'
+
 @trips_bp.route('/trips/<int:trip_id>', methods=['DELETE'])
-@auth_required
+@jwt_required
 def delete_trip(trip_id):
     # Verificar si el usuario es un ranger
     if not is_ranger():
@@ -1738,7 +1771,7 @@ def delete_trip(trip_id):
         return jsonify({'message': f'Error al eliminar el viaje: {str(e)}'}), 500
 
 @trips_bp.route('/trips/<int:trip_id>', methods=['PUT'])
-@auth_required
+@jwt_required
 def edit_trip(trip_id):
     # Verificar si el usuario es un ranger
     if not is_ranger():
@@ -1764,10 +1797,42 @@ def edit_trip(trip_id):
                 setattr(trip, key, value)
         
         db.session.commit()
-        return jsonify({'message': 'Viaje actualizado exitosamente', 'trip': trip.to_dict()}), 200
+        
+        # Verificar si el objeto trip tiene un método to_dict
+        if hasattr(trip, 'to_dict'):
+            trip_data = trip.to_dict()
+        else:
+            # Crear un diccionario manualmente si no existe el método
+            trip_data = {
+                'id': trip.id,
+                'trip_name': trip.trip_name,
+                'description': trip.description,
+                'total_cost': trip.total_cost,
+                # Agregar otros campos según sea necesario
+            }
+            
+        return jsonify({'message': 'Viaje actualizado exitosamente', 'trip': trip_data}), 200
     except Exception as e:
         db.session.rollback()
         return jsonify({'message': f'Error al actualizar el viaje: {str(e)}'}), 500
+
+# Nuevo endpoint para verificar si un viaje tiene reservaciones
+@trips_bp.route('/trips/<int:trip_id>/check', methods=['GET'])
+@jwt_required
+def check_trip_reservations(trip_id):
+    # Verificar si el usuario es un ranger
+    if not is_ranger():
+        return jsonify({'message': 'No tienes permisos para verificar este viaje'}), 403
+    
+    # Verificar si hay reservaciones para este viaje
+    reservations = Reservation.query.filter_by(trip_id=trip_id).first()
+    has_reservations = reservations is not None
+    
+    return jsonify({'hasReservations': has_reservations}), 200
+
+# Registrar el blueprint
+def register_trips_blueprint(app):
+    app.register_blueprint(trips_bp)
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", debug=True, port=5000)
