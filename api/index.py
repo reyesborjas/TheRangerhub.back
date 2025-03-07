@@ -16,6 +16,12 @@ app = Flask(__name__)
 # Combined CORS configuration
 CORS(app)
 
+from flask import Blueprint, request, jsonify
+from models import Trip, Reservation, ActivityTrip, db
+from auth import auth_required, is_ranger
+
+trips_bp = Blueprint('trips', __name__)
+
 # Add a specific OPTIONS handler - KEEP ONLY THIS ONE
 @app.route('/', defaults={'path': ''}, methods=['OPTIONS'])
 @app.route('/<path:path>', methods=['OPTIONS'])
@@ -1700,6 +1706,68 @@ def create_payment():
             cursor.close()
         if 'connection' in locals():
             connection.close()
+
+@trips_bp.route('/trips/<int:trip_id>', methods=['DELETE'])
+@auth_required
+def delete_trip(trip_id):
+    # Verificar si el usuario es un ranger
+    if not is_ranger():
+        return jsonify({'message': 'No tienes permisos para eliminar viajes'}), 403
+    
+    # Buscar el viaje por ID
+    trip = Trip.query.get(trip_id)
+    if not trip:
+        return jsonify({'message': 'Viaje no encontrado'}), 404
+    
+    # Verificar si hay reservaciones para este viaje
+    reservations = Reservation.query.filter_by(trip_id=trip_id).first()
+    if reservations:
+        return jsonify({'message': 'No se puede eliminar el viaje porque tiene reservaciones existentes'}), 400
+    
+    try:
+        # Eliminar todas las actividades asociadas al viaje
+        ActivityTrip.query.filter_by(trip_id=trip_id).delete()
+        
+        # Eliminar el viaje
+        db.session.delete(trip)
+        db.session.commit()
+        
+        return jsonify({'message': 'Viaje eliminado exitosamente'}), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'message': f'Error al eliminar el viaje: {str(e)}'}), 500
+
+@trips_bp.route('/trips/<int:trip_id>', methods=['PUT'])
+@auth_required
+def edit_trip(trip_id):
+    # Verificar si el usuario es un ranger
+    if not is_ranger():
+        return jsonify({'message': 'No tienes permisos para editar viajes'}), 403
+    
+    # Buscar el viaje por ID
+    trip = Trip.query.get(trip_id)
+    if not trip:
+        return jsonify({'message': 'Viaje no encontrado'}), 404
+    
+    # Verificar si hay reservaciones para este viaje
+    reservations = Reservation.query.filter_by(trip_id=trip_id).first()
+    if reservations:
+        return jsonify({'message': 'No se puede editar el viaje porque tiene reservaciones existentes'}), 400
+    
+    # Obtener datos de la solicitud
+    data = request.get_json()
+    
+    try:
+        # Actualizar los campos del viaje
+        for key, value in data.items():
+            if hasattr(trip, key):
+                setattr(trip, key, value)
+        
+        db.session.commit()
+        return jsonify({'message': 'Viaje actualizado exitosamente', 'trip': trip.to_dict()}), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'message': f'Error al actualizar el viaje: {str(e)}'}), 500
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", debug=True, port=5000)
