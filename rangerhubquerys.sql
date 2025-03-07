@@ -19,6 +19,7 @@ INSERT INTO locations (place_name, place_type, country, province, nearest_city, 
 ('Pucón', 'Río Correntoso', 'Chile', 'Pucón', 'Villarica', point(-39.272255, -71.977631), 'pucon.jpg');
 ('Cajón del Maipo', 'Centro de Parapente', 'Chile', 'Santiago', 'Santiago', point(-33.8336, -70.1162), 'cajon-maipo-parapente.jpg');
 ('San Pedro', 'Centro Turístico', 'Chile', 'El Loa', 'Calama', point(-22.916667, -68.2), 'san-pedro.jpg');
+('Cajón del Maipo', 'Río Maipo', 'Chile', 'Santiago', 'Santiago', point(-33.8336, -70.1162), 'cajon-maipo-puenting.jpg');
 
 -- Insertar categorías de actividades
 INSERT INTO activity_categories (name, description) VALUES
@@ -28,7 +29,8 @@ INSERT INTO activity_categories (name, description) VALUES
 ('Rafting', 'Bajada en balsa por el río Maipo')
 ('Canyoning', 'Descender por cañones y ríos')
 ('Parapente', 'Vuelo en parapente')
-('Sanboard', 'Deslizada sobre dunas,')
+('Sanboard', 'Deslizada sobre dunas')
+('Puenting', 'Salto sobre río')
 
 -- Insertar actividades
 INSERT INTO activities (category_id, location_id, name, description, duration, difficulty, min_participants, max_participants, cancellation_policy, cost) VALUES
@@ -39,6 +41,7 @@ INSERT INTO activities (category_id, location_id, name, description, duration, d
 ((SELECT id FROM activity_categories WHERE name = 'Canyoning'), (SELECT id FROM locations WHERE place_name = 'Araucanía'), 'Canyoning', 'Descender por cañones y ríos', 6, 'difícil', 1, 8, 'Cancelación gratuita con 24 horas de anticipación', 150000.00);
 ((SELECT id FROM activity_categories WHERE name = 'Parapente'), (SELECT id FROM locations WHERE place_name = 'Cajon del Maipo'), 'Parapente', 'Vuelo en parapente', 6, 'fácil', 1, 8, 'Cancelación gratuita con 24 horas de anticipación', 65000.00);
 ((SELECT id FROM activity_categories WHERE name = 'Sandboard'), (SELECT id FROM locations WHERE place_name = 'San Pedro'), 'Sandboard', 'Deslizada sobre dunas', 4, 'fácil', 1, 20, 'Cancelación gratuita con 24 horas de anticipación', 50000.00);
+((SELECT id FROM activity_categories WHERE name = 'Puenting'), (SELECT id FROM locations WHERE place_name = 'Cajon del Maipo'), 'Puenting', 'Salto sobre río', 2, 'fácil', 1, 1, 'No tiene cancelación gratuita', 60000.00);
 
 -- Insertar viajes
 INSERT INTO trips (start_date, end_date, participants_number, trip_status, description, total_cost) VALUES
@@ -67,8 +70,8 @@ INSERT INTO resources (name, description, cost) VALUES
 ('Casco', '{"tipo": "equipo_técnico", "marca": "Xped", "talla": "universal"}', 50000.00);
 ('Tabla', '{"tipo": "equipo_técnico", "marca": "Adventure", "talla": "universal"}', 120000.00);
 ('Salvavidas', '{"tipo": "equipo_técnico", "marca": "Decathlon", "talla": "universal"}', 80000.00);
-
-
+('Arnes de tobillo ', '{"tipo": "equipo_técnico", "marca": "SportFitness", "talla": "universal"}', 10000.00);
+('Cuerda', '{"tipo": "equipo_técnico", "marca": "SportFitness", "talla": "universal"}', 62000.00);
 
 -- Insertar recursos para viajes
 INSERT INTO trip_resources (resource_id, trip_id) VALUES
