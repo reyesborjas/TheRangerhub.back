@@ -610,6 +610,8 @@ def get_locations():
     finally:
         cursor.close()
         connection.close()
+        
+# Endpoint para obtener las ubicaciones de un viaje específico
 @app.route('/trips/<uuid:trip_id>/locations', methods=['GET'])
 def get_trip_locations(trip_id):
     connection = get_db_connection()
@@ -618,7 +620,7 @@ def get_trip_locations(trip_id):
         
         # Consulta para obtener todas las ubicaciones asociadas a las actividades de un viaje
         cursor.execute("""
-            SELECT l.id, l.place_name, l.latitude, l.longitude
+            SELECT l.id, l.place_name, l.coordinates
             FROM locations l
             JOIN activities a ON l.id = a.location_id
             JOIN activity_trips at ON a.id = at.activity_id
@@ -627,6 +629,47 @@ def get_trip_locations(trip_id):
         
         locations = cursor.fetchall()
         return jsonify({"locations": locations}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        cursor.close()
+        connection.close()
+
+# Endpoint para obtener el próximo viaje según el rol del usuario
+@app.route('/next-trip/<uuid:user_id>/<string:role>', methods=['GET'])
+def get_next_trip(user_id, role):
+    connection = get_db_connection()
+    try:
+        cursor = connection.cursor()
+        
+        if role.lower() == 'ranger':
+            # Para rangers, buscar en trips donde lead_ranger coincide con user_id
+            cursor.execute("""
+                SELECT id, trip_name, start_date, trip_status
+                FROM trips 
+                WHERE lead_ranger = %s::uuid
+                AND start_date >= CURRENT_DATE
+                ORDER BY start_date ASC
+                LIMIT 1
+            """, (str(user_id),))
+        else:
+            # Para explorers, buscar en reservations y unir con trips
+            cursor.execute("""
+                SELECT t.id, t.trip_name, t.start_date, t.trip_status
+                FROM trips t
+                JOIN reservations r ON t.id = r.trip_id
+                WHERE r.user_id = %s::uuid
+                AND t.start_date >= CURRENT_DATE
+                ORDER BY t.start_date ASC
+                LIMIT 1
+            """, (str(user_id),))
+        
+        trip = cursor.fetchone()
+        
+        if trip:
+            return jsonify({"trip": trip}), 200
+        else:
+            return jsonify({"message": "No upcoming trips found"}), 404
     except Exception as e:
         return jsonify({"error": str(e)}), 500
     finally:
