@@ -12,7 +12,6 @@ import uuid
 import json
 load_dotenv()
 
-
 app = Flask(__name__)
 # Combined CORS configuration
 CORS(app)
@@ -466,7 +465,6 @@ def associate_activity_trip():
     except Exception as e:
         logging.error(f"Error general: {str(e)}")
         return jsonify({"message": "Error procesando la solicitud"}), 500
-
 
 @app.route('/trips/<trip_id>/activities', methods=['GET'])
 def get_trip_activities(trip_id):
