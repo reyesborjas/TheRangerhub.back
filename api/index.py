@@ -1702,8 +1702,130 @@ def create_payment():
         if 'connection' in locals():
             connection.close()
 
-@app.route('/trips/<trip_id>', methods=['DELETE'])
-def delete_trip(trip_id):
+@app.route('/trips/action', methods=['POST'])
+def trip_action():
+    """
+    Endpoint para realizar acciones sobre viajes (eliminar/verificar) usando POST en lugar de DELETE
+    """
+    logging.info("Trip action endpoint called")
+    
+    # Verificar la autenticación y el rol del usuario
+    auth_header = request.headers.get('Authorization')
+    if not auth_header or not auth_header.startswith('Bearer '):
+        return jsonify({"message": "No se proporcionó token de autenticación"}), 401
+        
+    token = auth_header.split(' ')[1]
+    try:
+        # Decodificar el token JWT
+        payload = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
+        user_role = payload.get('role_name')
+        
+        # Verificar si el usuario es un Ranger
+        if user_role != 'Ranger':
+            return jsonify({"message": "No tienes permisos para esta acción. Rol requerido: Ranger"}), 403
+    except jwt.ExpiredSignatureError:
+        return jsonify({"message": "Token expirado"}), 401
+    except jwt.InvalidTokenError:
+        return jsonify({"message": "Token inválido"}), 401
+    
+    # Obtener datos del cuerpo de la solicitud
+    body = request.get_json()
+    if not body:
+        return jsonify({"message": "No se proporcionaron datos"}), 400
+        
+    action = body.get('action')
+    trip_id = body.get('trip_id')
+    
+    if not action or not trip_id:
+        return jsonify({"message": "Faltan parámetros: action y trip_id son requeridos"}), 400
+        
+    # Validar ID del viaje
+    try:
+        trip_uuid = uuid.UUID(trip_id)
+    except ValueError:
+        return jsonify({"message": "Formato de ID de viaje inválido"}), 400
+        
+    # Obtener conexión a la base de datos
+    connection = get_db_connection()
+    if not connection:
+        return jsonify({"message": "Error de conexión con la base de datos"}), 500
+        
+    cursor = connection.cursor()
+    
+    try:
+        # Verificar si el viaje existe
+        cursor.execute("SELECT id, trip_name FROM trips WHERE id = %s", (str(trip_uuid),))
+        trip = cursor.fetchone()
+        if not trip:
+            return jsonify({"message": "Viaje no encontrado"}), 404
+            
+        # ACCIÓN: VERIFICAR RESERVACIONES
+        if action.lower() == 'check':
+            # Verificar si el viaje tiene reservaciones
+            cursor.execute("SELECT COUNT(*) as count FROM reservations WHERE trip_id = %s", (str(trip_uuid),))
+            result = cursor.fetchone()
+            reservation_count = result["count"] if "count" in result else 0
+            has_reservations = reservation_count > 0
+            
+            return jsonify({
+                "trip_id": trip_id,
+                "hasReservations": has_reservations,
+                "reservationCount": reservation_count
+            }), 200
+            
+        # ACCIÓN: ELIMINAR VIAJE
+        elif action.lower() == 'delete':
+            # Verificar si el viaje tiene reservaciones
+            cursor.execute("SELECT id FROM reservations WHERE trip_id = %s LIMIT 1", (str(trip_uuid),))
+            has_reservations = cursor.fetchone() is not None
+            
+            if has_reservations:
+                return jsonify({
+                    "message": "No se puede eliminar el viaje porque tiene reservaciones existentes"
+                }), 400
+                
+            # Si no tiene reservaciones, proceder con la eliminación
+            # Paso 1: Eliminar las actividades asociadas al viaje
+            cursor.execute("DELETE FROM activity_trips WHERE trip_id = %s", (str(trip_uuid),))
+            activity_count = cursor.rowcount
+            logging.info(f"Deleted {activity_count} activities associated with trip {trip_id}")
+            
+            # Paso 2: Eliminar recursos asociados al viaje (si existen)
+            try:
+                cursor.execute("DELETE FROM trip_resources WHERE trip_id = %s", (str(trip_uuid),))
+                resource_count = cursor.rowcount
+                logging.info(f"Deleted {resource_count} resources associated with trip {trip_id}")
+            except Exception as e:
+                logging.warning(f"Error deleting trip_resources: {str(e)}")
+                # Continuamos con la eliminación del viaje incluso si hay error con los recursos
+            
+            # Paso 3: Eliminar el viaje
+            cursor.execute("DELETE FROM trips WHERE id = %s", (str(trip_uuid),))
+            
+            if cursor.rowcount == 0:
+                # Si llegamos aquí, es extraño porque verificamos que existía antes
+                connection.rollback()
+                return jsonify({"message": "Error al eliminar el viaje"}), 500
+                
+            # Confirmar todos los cambios en la base de datos
+            connection.commit()
+            
+            trip_name = trip["trip_name"] if "trip_name" in trip else "Desconocido"
+            return jsonify({
+                "message": f"Viaje '{trip_name}' eliminado exitosamente",
+                "activities_removed": activity_count
+            }), 200
+        
+        else:
+            return jsonify({"message": f"Acción no reconocida: {action}"}), 400
+            
+    except Exception as e:
+        connection.rollback()
+        logging.error(f"Error in trip action: {str(e)}")
+        return jsonify({"message": f"Error al procesar la acción: {str(e)}"}), 500
+    finally:
+        cursor.close()
+        connection.close()
     """
     Endpoint para eliminar un viaje si no tiene reservaciones existentes.
     También elimina todas las actividades asociadas al viaje de la tabla activity_trips.
