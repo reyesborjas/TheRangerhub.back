@@ -70,7 +70,7 @@ INSERT INTO resources (name, description, cost) VALUES
 ('Casco', '{"tipo": "equipo_técnico", "marca": "Xped", "talla": "universal"}', 50000.00);
 ('Tabla', '{"tipo": "equipo_técnico", "marca": "Adventure", "talla": "universal"}', 120000.00);
 ('Salvavidas', '{"tipo": "equipo_técnico", "marca": "Decathlon", "talla": "universal"}', 80000.00);
-('Arnes de tobillo ', '{"tipo": "equipo_técnico", "marca": "SportFitness", "talla": "universal"}', 10000.00);
+('Arnes de Tobillo ', '{"tipo": "equipo_técnico", "marca": "SportFitness", "talla": "universal"}', 10000.00);
 ('Cuerda', '{"tipo": "equipo_técnico", "marca": "SportFitness", "talla": "universal"}', 62000.00);
 
 -- Insertar recursos para viajes
@@ -80,6 +80,10 @@ INSERT INTO trip_resources (resource_id, trip_id) VALUES
 ((SELECT id FROM resources WHERE name = 'Crampones'), (SELECT id FROM trips WHERE description LIKE '%Valle Nevado%'));
 ((SELECT id FROM resources WHERE name = 'Remo'), (SELECT id FROM trips WHERE description LIKE '%Cajón del Maipo%'));
 ((SELECT id FROM resources WHERE name = 'Casco'), (SELECT id FROM trips WHERE description LIKE '%Pucón%'));
+((SELECT id FROM resources WHERE name = 'Tabla'), (SELECT id FROM trips WHERE description LIKE '%San Pedro%'));
+((SELECT id FROM resources WHERE name = 'Salvavidas'), (SELECT id FROM trips WHERE description LIKE '%Cajón del Maipo%'));
+((SELECT id FROM resources WHERE name = 'Arnes de Tobillo'), (SELECT id FROM trips WHERE description LIKE '%%Cajón del Maipo%%'));
+((SELECT id FROM resources WHERE name = 'Cuerda'), (SELECT id FROM trips WHERE description LIKE '%Cajón del Maipo%'));
 
 -- Insertar actividades para viajes
 INSERT INTO activity_trips (activity_id, trip_id) VALUES
@@ -88,6 +92,9 @@ INSERT INTO activity_trips (activity_id, trip_id) VALUES
 ((SELECT id FROM activities WHERE name = 'Escalada en Hielo'), (SELECT id FROM trips WHERE description LIKE '%Valle Nevado%'));
 ((SELECT id FROM activities WHERE name = 'Rafting') ,(SELECT id FROM trips WHERE description LIKE '%Cajón del Maipo%'));
 ((SELECT id FROM activities WHERE name = 'Canyoning') ,(SELECT id FROM trips WHERE description LIKE '%Pucón%'));
+((SELECT id FROM activities WHERE name = 'Parapente') ,(SELECT id FROM trips WHERE description LIKE '%Cajón del Maipo%'));
+((SELECT id FROM activities WHERE name = 'Sandboard') ,(SELECT id FROM trips WHERE description LIKE '%San Pedro%'));
+((SELECT id FROM activities WHERE name = 'Puenting') ,(SELECT id FROM trips WHERE description LIKE '%Cajón del Maipo%'));
 
 -- Insertar certificaciones
 INSERT INTO certifications (issued_by, issued_date, valid_until, certification_number, title) VALUES
