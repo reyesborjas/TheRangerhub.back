@@ -466,6 +466,7 @@ def associate_activity_trip():
         logging.error(f"Error general: {str(e)}")
         return jsonify({"message": "Error procesando la solicitud"}), 500
 
+
 @app.route('/trips/<trip_id>/activities', methods=['GET'])
 def get_trip_activities(trip_id):
     connection = get_db_connection()
