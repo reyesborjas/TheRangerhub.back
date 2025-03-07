@@ -1702,7 +1702,303 @@ def create_payment():
         if 'connection' in locals():
             connection.close()
 
+@app.route('/trips/<trip_id>', methods=['DELETE'])
+def delete_trip(trip_id):
+    """
+    Endpoint para eliminar un viaje si no tiene reservaciones existentes.
+    También elimina todas las actividades asociadas al viaje de la tabla activity_trips.
+    Solo usuarios con rol Ranger pueden acceder a esta funcionalidad.
+    """
+    logging.info(f"Attempting to delete trip with ID: {trip_id}")
+    
+    # Verificar la autenticación y el rol del usuario
+    auth_header = request.headers.get('Authorization')
+    if not auth_header or not auth_header.startswith('Bearer '):
+        return jsonify({"message": "No se proporcionó token de autenticación"}), 401
+        
+    token = auth_header.split(' ')[1]
+    try:
+        # Decodificar el token JWT
+        payload = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
+        user_role = payload.get('role_name')
+        
+        # Verificar si el usuario es un Ranger
+        if user_role != 'Ranger':
+            return jsonify({"message": "No tienes permisos para eliminar viajes. Rol requerido: Ranger"}), 403
+    except jwt.ExpiredSignatureError:
+        return jsonify({"message": "Token expirado"}), 401
+    except jwt.InvalidTokenError:
+        return jsonify({"message": "Token inválido"}), 401
+    
+    # Obtener conexión a la base de datos
+    connection = get_db_connection()
+    if not connection:
+        return jsonify({"message": "Error de conexión con la base de datos"}), 500
+        
+    cursor = connection.cursor()
+    
+    try:
+        # Validar ID del viaje
+        try:
+            trip_uuid = uuid.UUID(trip_id)
+        except ValueError:
+            return jsonify({"message": "Formato de ID de viaje inválido"}), 400
+            
+        # Verificar si el viaje existe
+        cursor.execute("SELECT id, trip_name FROM trips WHERE id = %s", (str(trip_uuid),))
+        trip = cursor.fetchone()
+        if not trip:
+            return jsonify({"message": "Viaje no encontrado"}), 404
+            
+        # Verificar si el viaje tiene reservaciones
+        cursor.execute("SELECT id FROM reservations WHERE trip_id = %s LIMIT 1", (str(trip_uuid),))
+        has_reservations = cursor.fetchone() is not None
+        
+        if has_reservations:
+            return jsonify({
+                "message": "No se puede eliminar el viaje porque tiene reservaciones existentes"
+            }), 400
+            
+        # Si no tiene reservaciones, proceder con la eliminación
+        # Paso 1: Eliminar las actividades asociadas al viaje
+        cursor.execute("DELETE FROM activity_trips WHERE trip_id = %s", (str(trip_uuid),))
+        activity_count = cursor.rowcount
+        logging.info(f"Deleted {activity_count} activities associated with trip {trip_id}")
+        
+        # Paso 2: Eliminar recursos asociados al viaje (si existen)
+        try:
+            cursor.execute("DELETE FROM trip_resources WHERE trip_id = %s", (str(trip_uuid),))
+            resource_count = cursor.rowcount
+            logging.info(f"Deleted {resource_count} resources associated with trip {trip_id}")
+        except Exception as e:
+            logging.warning(f"Error deleting trip_resources: {str(e)}")
+            # Continuamos con la eliminación del viaje incluso si hay error con los recursos
+        
+        # Paso 3: Eliminar el viaje
+        cursor.execute("DELETE FROM trips WHERE id = %s", (str(trip_uuid),))
+        
+        if cursor.rowcount == 0:
+            # Si llegamos aquí, es extraño porque verificamos que existía antes
+            connection.rollback()
+            return jsonify({"message": "Error al eliminar el viaje"}), 500
+            
+        # Confirmar todos los cambios en la base de datos
+        connection.commit()
+        
+        trip_name = trip["trip_name"] if "trip_name" in trip else "Desconocido"
+        return jsonify({
+            "message": f"Viaje '{trip_name}' eliminado exitosamente",
+            "activities_removed": activity_count
+        }), 200
+        
+    except Exception as e:
+        connection.rollback()
+        logging.error(f"Error deleting trip: {str(e)}")
+        return jsonify({"message": f"Error al eliminar el viaje: {str(e)}"}), 500
+    finally:
+        cursor.close()
+        connection.close()
 
+@app.route('/trips/<trip_id>/check', methods=['GET'])
+def check_trip_reservations(trip_id):
+    """
+    Endpoint para verificar si un viaje tiene reservaciones.
+    Solo usuarios con rol Ranger pueden acceder a esta funcionalidad.
+    """
+    logging.info(f"Checking reservations for trip ID: {trip_id}")
+    
+    # Verificar la autenticación y el rol del usuario
+    auth_header = request.headers.get('Authorization')
+    if not auth_header or not auth_header.startswith('Bearer '):
+        return jsonify({"message": "No se proporcionó token de autenticación"}), 401
+        
+    token = auth_header.split(' ')[1]
+    try:
+        # Decodificar el token JWT
+        payload = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
+        user_role = payload.get('role_name')
+        
+        # Verificar si el usuario es un Ranger
+        if user_role != 'Ranger':
+            return jsonify({"message": "No tienes permisos para verificar este viaje. Rol requerido: Ranger"}), 403
+    except jwt.ExpiredSignatureError:
+        return jsonify({"message": "Token expirado"}), 401
+    except jwt.InvalidTokenError:
+        return jsonify({"message": "Token inválido"}), 401
+    
+    # Obtener conexión a la base de datos
+    connection = get_db_connection()
+    if not connection:
+        return jsonify({"message": "Error de conexión con la base de datos"}), 500
+        
+    cursor = connection.cursor()
+    
+    try:
+        # Validar ID del viaje
+        try:
+            trip_uuid = uuid.UUID(trip_id)
+        except ValueError:
+            return jsonify({"message": "Formato de ID de viaje inválido"}), 400
+            
+        # Verificar si el viaje existe
+        cursor.execute("SELECT id, trip_name FROM trips WHERE id = %s", (str(trip_uuid),))
+        trip = cursor.fetchone()
+        if not trip:
+            return jsonify({"message": "Viaje no encontrado"}), 404
+            
+        # Verificar si el viaje tiene reservaciones
+        cursor.execute("SELECT COUNT(*) as count FROM reservations WHERE trip_id = %s", (str(trip_uuid),))
+        result = cursor.fetchone()
+        reservation_count = result["count"] if "count" in result else 0
+        has_reservations = reservation_count > 0
+        
+        # Obtener información sobre las reservaciones si existen
+        reservations_info = []
+        if has_reservations:
+            cursor.execute("""
+                SELECT r.id, r.status, u.first_name, u.last_name, u.email
+                FROM reservations r
+                JOIN users u ON r.user_id = u.id
+                WHERE r.trip_id = %s
+            """, (str(trip_uuid),))
+            
+            reservations = cursor.fetchall()
+            for reservation in reservations:
+                reservations_info.append({
+                    "id": str(reservation["id"]),
+                    "status": reservation["status"],
+                    "user": f"{reservation['first_name']} {reservation['last_name']}",
+                    "email": reservation["email"]
+                })
+        
+        return jsonify({
+            "trip_id": trip_id,
+            "trip_name": trip["trip_name"],
+            "hasReservations": has_reservations,
+            "reservationCount": reservation_count,
+            "reservations": reservations_info
+        }), 200
+        
+    except Exception as e:
+        logging.error(f"Error checking trip reservations: {str(e)}")
+        return jsonify({"message": f"Error al verificar las reservaciones: {str(e)}"}), 500
+    finally:
+        cursor.close()
+        connection.close()
+        
+@app.route('/trips/<trip_id>', methods=['PUT'])
+def edit_trip(trip_id):
+    """
+    Endpoint para editar un viaje si no tiene reservaciones existentes.
+    Solo usuarios con rol Ranger pueden acceder a esta funcionalidad.
+    """
+    logging.info(f"Attempting to edit trip with ID: {trip_id}")
+    
+    # Verificar la autenticación y el rol del usuario
+    auth_header = request.headers.get('Authorization')
+    if not auth_header or not auth_header.startswith('Bearer '):
+        return jsonify({"message": "No se proporcionó token de autenticación"}), 401
+        
+    token = auth_header.split(' ')[1]
+    try:
+        # Decodificar el token JWT
+        payload = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
+        user_role = payload.get('role_name')
+        
+        # Verificar si el usuario es un Ranger
+        if user_role != 'Ranger':
+            return jsonify({"message": "No tienes permisos para editar viajes. Rol requerido: Ranger"}), 403
+    except jwt.ExpiredSignatureError:
+        return jsonify({"message": "Token expirado"}), 401
+    except jwt.InvalidTokenError:
+        return jsonify({"message": "Token inválido"}), 401
+    
+    # Obtener conexión a la base de datos
+    connection = get_db_connection()
+    if not connection:
+        return jsonify({"message": "Error de conexión con la base de datos"}), 500
+        
+    cursor = connection.cursor()
+    
+    try:
+        # Validar ID del viaje
+        try:
+            trip_uuid = uuid.UUID(trip_id)
+        except ValueError:
+            return jsonify({"message": "Formato de ID de viaje inválido"}), 400
+            
+        # Verificar si el viaje existe
+        cursor.execute("SELECT * FROM trips WHERE id = %s", (str(trip_uuid),))
+        trip = cursor.fetchone()
+        if not trip:
+            return jsonify({"message": "Viaje no encontrado"}), 404
+            
+        # Verificar si el viaje tiene reservaciones
+        cursor.execute("SELECT id FROM reservations WHERE trip_id = %s LIMIT 1", (str(trip_uuid),))
+        has_reservations = cursor.fetchone() is not None
+        
+        if has_reservations:
+            return jsonify({
+                "message": "No se puede editar el viaje porque tiene reservaciones existentes"
+            }), 400
+            
+        # Si no tiene reservaciones, proceder con la edición
+        body = request.get_json()
+        if not body:
+            return jsonify({"message": "No se proporcionaron datos para actualizar"}), 400
+            
+        # Construir la consulta SQL dinámicamente con los campos proporcionados
+        update_fields = []
+        update_values = []
+        
+        # Campos permitidos para actualizar
+        allowed_fields = [
+            'trip_name', 'start_date', 'end_date', 'max_participants_number',
+            'trip_status', 'estimated_weather_forecast', 'description',
+            'total_cost', 'trip_image_url', 'lead_ranger'
+        ]
+        
+        for field in allowed_fields:
+            if field in body:
+                update_fields.append(f"{field} = %s")
+                update_values.append(body[field])
+        
+        if not update_fields:
+            return jsonify({"message": "No se proporcionaron campos válidos para actualizar"}), 400
+            
+        # Agregar el ID del viaje como último parámetro
+        update_values.append(str(trip_uuid))
+        
+        # Construir y ejecutar la consulta de actualización
+        update_query = f"""
+            UPDATE trips 
+            SET {', '.join(update_fields)}
+            WHERE id = %s
+            RETURNING id, trip_name
+        """
+        
+        cursor.execute(update_query, update_values)
+        updated_trip = cursor.fetchone()
+        
+        if not updated_trip:
+            connection.rollback()
+            return jsonify({"message": "Error al actualizar el viaje"}), 500
+            
+        # Confirmar todos los cambios en la base de datos
+        connection.commit()
+        
+        return jsonify({
+            "message": f"Viaje '{updated_trip['trip_name']}' actualizado exitosamente",
+            "id": str(updated_trip["id"])
+        }), 200
+        
+    except Exception as e:
+        connection.rollback()
+        logging.error(f"Error updating trip: {str(e)}")
+        return jsonify({"message": f"Error al actualizar el viaje: {str(e)}"}), 500
+    finally:
+        cursor.close()
+        connection.close()
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", debug=True, port=5000)
