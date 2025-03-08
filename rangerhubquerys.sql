@@ -17,6 +17,9 @@ INSERT INTO locations (place_name, place_type, country, province, nearest_city, 
 ('Valle Nevado', 'Centro de Ski', 'Chile', 'Santiago', 'Santiago', point(-33.3567, -70.2489), 'valle-nevado.jpg');
 ('Cajón del Maipo', 'Río Maipo', 'Chile', 'Santiago', 'Santiago', point(-33.8336, -70.1162), 'cajon-maipo.jpg');
 ('Pucón', 'Río Correntoso', 'Chile', 'Pucón', 'Villarica', point(-39.272255, -71.977631), 'pucon.jpg');
+('Cajón del Maipo', 'Centro de Parapente', 'Chile', 'Santiago', 'Santiago', point(-33.8336, -70.1162), 'cajon-maipo-parapente.jpg');
+('San Pedro', 'Centro Turístico', 'Chile', 'El Loa', 'Calama', point(-22.916667, -68.2), 'san-pedro.jpg');
+('Cajón del Maipo', 'Río Maipo', 'Chile', 'Santiago', 'Santiago', point(-33.8336, -70.1162), 'cajon-maipo-puenting.jpg');
 
 -- Insertar categorías de actividades
 INSERT INTO activity_categories (name, description) VALUES
@@ -24,14 +27,21 @@ INSERT INTO activity_categories (name, description) VALUES
 ('Trekking', 'Caminatas por senderos naturales'),
 ('Escalada', 'Actividades de escalada en roca y hielo');
 ('Rafting', 'Bajada en balsa por el río Maipo')
+('Canyoning', 'Descender por cañones y ríos')
+('Parapente', 'Vuelo en parapente')
+('Sanboard', 'Deslizada sobre dunas')
+('Puenting', 'Salto sobre río')
 
 -- Insertar actividades
 INSERT INTO activities (category_id, location_id, name, description, duration, difficulty, min_participants, max_participants, cancellation_policy, cost) VALUES
 ((SELECT id FROM activity_categories WHERE name = 'Montañismo'), (SELECT id FROM locations WHERE place_name = 'Volcán Villarrica'), 'Ascenso Villarrica', 'Ascenso guiado al volcán Villarrica', 8.5, 'difícil', 2, 8, 'Cancelación gratuita con 48 horas de anticipación', 150000.00),
 ((SELECT id FROM activity_categories WHERE name = 'Trekking'), (SELECT id FROM locations WHERE place_name = 'Torres del Paine'), 'Circuito W', 'Trekking por el famoso circuito W', 24.0, 'moderado', 4, 12, 'Cancelación gratuita con 72 horas de anticipación', 280000.00),
 ((SELECT id FROM activity_categories WHERE name = 'Escalada'), (SELECT id FROM locations WHERE place_name = 'Valle Nevado'), 'Escalada en Hielo', 'Curso básico de escalada en hielo', 6.0, 'intermedio', 2, 6, 'Cancelación gratuita con 24 horas de anticipación', 120000.00);
-((SELECT id FROM activity_categories WHERE name = 'Rafting'), (SELECT id FROM locations WHERE place_name = 'Cajon del Maipo'), 'Rafting', 'Bajada en balsa por el río Maipo', 3.0, 'moderada', 4, 8, 'Cancelación gratuita con 48 horas de anticipación', 100.00);
-((SELECT id FROM activity_categories WHERE name = 'Canyoning'), (SELECT id FROM locations WHERE place_name = 'Canyoning en Pucón'), 'Canyoning', 'Barranquismo en Pucón', 6.0, 'difícil', 1, 8, 'Cancelación gratuita con 24 horas de anticipación', 150000.00);
+((SELECT id FROM activity_categories WHERE name = 'Rafting'), (SELECT id FROM locations WHERE place_name = 'Cajón del Maipo'), 'Rafting', 'Bajada en balsa por el río Maipo', 3, 'moderada', 4, 8, 'Cancelación gratuita con 48 horas de anticipación', 100.00);
+((SELECT id FROM activity_categories WHERE name = 'Canyoning'), (SELECT id FROM locations WHERE place_name = 'Araucanía'), 'Canyoning', 'Descender por cañones y ríos', 6, 'difícil', 1, 8, 'Cancelación gratuita con 24 horas de anticipación', 150000.00);
+((SELECT id FROM activity_categories WHERE name = 'Parapente'), (SELECT id FROM locations WHERE place_name = 'Cajón del Maipo'), 'Parapente', 'Vuelo en parapente', 1, 'fácil', 1, 8, 'Cancelación gratuita con 24 horas de anticipación', 65000.00);
+((SELECT id FROM activity_categories WHERE name = 'Sandboard'), (SELECT id FROM locations WHERE place_name = 'San Pedro'), 'Sandboard', 'Deslizada sobre dunas', 4, 'fácil', 1, 20, 'Cancelación gratuita con 24 horas de anticipación', 50000.00);
+((SELECT id FROM activity_categories WHERE name = 'Puenting'), (SELECT id FROM locations WHERE place_name = 'Cajón del Maipo'), 'Puenting', 'Salto sobre río', 2, 'fácil', 1, 1, 'No tiene cancelación gratuita', 60000.00);
 
 -- Insertar viajes
 INSERT INTO trips (start_date, end_date, participants_number, trip_status, description, total_cost) VALUES
@@ -55,9 +65,13 @@ INSERT INTO payment (user_id, trip_id, payment_amount, payment_method, payment_d
 INSERT INTO resources (name, description, cost) VALUES
 ('Piolet', '{"tipo": "equipo_técnico", "marca": "Black Diamond", "estado": "nuevo"}', 75000.00),
 ('Carpa 4 estaciones', '{"tipo": "equipo_camping", "marca": "The North Face", "capacidad": "2 personas"}', 250000.00),
-('Crampones', '{"tipo": "equipo_técnico", "marca": "Petzl", "talla": "universal"}', 85000.00);
+('Crampones', '{"tipo": "equipo_escalada", "marca": "Petzl", "talla": "universal"}', 85000.00);
 ('Remo', '{"tipo": "equipo_técnico", "marca": "Xped", "talla": "universal"}', 40000.00);
-('Casco', '{"tipo": "equipo_escalada", "marca": "Xped", "talla": "universal"}', 50000.00);
+('Casco', '{"tipo": "equipo_técnico", "marca": "Xped", "talla": "universal"}', 50000.00);
+('Tabla', '{"tipo": "equipo_técnico", "marca": "Adventure", "talla": "universal"}', 120000.00);
+('Salvavidas', '{"tipo": "equipo_técnico", "marca": "Decathlon", "talla": "universal"}', 80000.00);
+('Arnes de Tobillo ', '{"tipo": "equipo_técnico", "marca": "SportFitness", "talla": "universal"}', 10000.00);
+('Cuerda', '{"tipo": "equipo_técnico", "marca": "SportFitness", "talla": "universal"}', 62000.00);
 
 -- Insertar recursos para viajes
 INSERT INTO trip_resources (resource_id, trip_id) VALUES
@@ -66,6 +80,10 @@ INSERT INTO trip_resources (resource_id, trip_id) VALUES
 ((SELECT id FROM resources WHERE name = 'Crampones'), (SELECT id FROM trips WHERE description LIKE '%Valle Nevado%'));
 ((SELECT id FROM resources WHERE name = 'Remo'), (SELECT id FROM trips WHERE description LIKE '%Cajón del Maipo%'));
 ((SELECT id FROM resources WHERE name = 'Casco'), (SELECT id FROM trips WHERE description LIKE '%Pucón%'));
+((SELECT id FROM resources WHERE name = 'Tabla'), (SELECT id FROM trips WHERE description LIKE '%San Pedro%'));
+((SELECT id FROM resources WHERE name = 'Salvavidas'), (SELECT id FROM trips WHERE description LIKE '%Cajón del Maipo%'));
+((SELECT id FROM resources WHERE name = 'Arnes de Tobillo'), (SELECT id FROM trips WHERE description LIKE '%%Cajón del Maipo%%'));
+((SELECT id FROM resources WHERE name = 'Cuerda'), (SELECT id FROM trips WHERE description LIKE '%Cajón del Maipo%'));
 
 -- Insertar actividades para viajes
 INSERT INTO activity_trips (activity_id, trip_id) VALUES
@@ -74,6 +92,9 @@ INSERT INTO activity_trips (activity_id, trip_id) VALUES
 ((SELECT id FROM activities WHERE name = 'Escalada en Hielo'), (SELECT id FROM trips WHERE description LIKE '%Valle Nevado%'));
 ((SELECT id FROM activities WHERE name = 'Rafting') ,(SELECT id FROM trips WHERE description LIKE '%Cajón del Maipo%'));
 ((SELECT id FROM activities WHERE name = 'Canyoning') ,(SELECT id FROM trips WHERE description LIKE '%Pucón%'));
+((SELECT id FROM activities WHERE name = 'Parapente') ,(SELECT id FROM trips WHERE description LIKE '%Cajón del Maipo%'));
+((SELECT id FROM activities WHERE name = 'Sandboard') ,(SELECT id FROM trips WHERE description LIKE '%San Pedro%'));
+((SELECT id FROM activities WHERE name = 'Puenting') ,(SELECT id FROM trips WHERE description LIKE '%Cajón del Maipo%'));
 
 -- Insertar certificaciones
 INSERT INTO certifications (issued_by, issued_date, valid_until, certification_number, title) VALUES
