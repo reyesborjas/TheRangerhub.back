@@ -2292,7 +2292,7 @@ def update_ranger_profile(ranger_id):
 
 # 4. Ruta para obtener los viajes de un ranger
 @app.route('/rangers/<string:ranger_id>/trips', methods=['GET'])
-def get_ranger_trips(ranger_id):
+def get_ranger_trips_list(ranger_id):
     connection = get_db_connection()
     if not connection:
         return jsonify({"error": "Database connection failed"}), 500
