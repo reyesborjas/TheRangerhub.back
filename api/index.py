@@ -239,7 +239,43 @@ def update_user_profile(username):
     finally:
         if 'cursor' in locals(): cursor.close()
         if connection: connection.close()
+@app.route('/api/certifications', methods=['GET'])
+def get_certifications():
+    connection = get_db_connection()
+    if not connection:
+        return jsonify({"error": "Database connection failed"}), 500
 
+    try:
+        cursor = connection.cursor(cursor_factory=RealDictCursor)
+        
+        # Obtener todas las certificaciones disponibles
+        cursor.execute("""
+            SELECT 
+                id,
+                title,
+                description,
+                certification_entity,
+                created_at
+            FROM certifications
+            ORDER BY title ASC
+        """)
+        
+        certifications = cursor.fetchall()
+        
+        # Formatear IDs para JSON
+        for cert in certifications:
+            cert['id'] = str(cert['id'])
+            cert['created_at'] = cert['created_at'].isoformat() if cert['created_at'] else None
+        
+        return jsonify({"certifications": certifications}), 200
+
+    except Exception as e:
+        logging.error(f"Error en /api/certifications: {str(e)}")
+        return jsonify({"error": "Error interno al obtener certificaciones"}), 500
+    finally:
+        if 'cursor' in locals(): cursor.close()
+        if connection: connection.close()
+        
 @app.route('/register', methods=['POST'])
 def register():
     """Registra un nuevo usuario"""
