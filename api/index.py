@@ -53,13 +53,176 @@ def hash_password(password):
     """Hashea la contraseña con SHA-256"""
     return hashlib.sha256(password.encode()).hexdigest()
 
-@app.route('/')
+
+
+app.route('/')
 def home():
     return 'Hello, World!'
 
 @app.route('/about')
 def about():
     return 'About'
+
+@app.route('/api/user-profile/<string:username>', methods=['GET'])
+def get_user_profile(username):
+    connection = get_db_connection()
+    if not connection:
+        return jsonify({"error": "Database connection failed"}), 500
+
+    try:
+        cursor = connection.cursor(cursor_factory=RealDictCursor)
+        
+        # Obtener datos del usuario
+        cursor.execute("""
+            SELECT 
+                id,
+                username,
+                first_name,
+                last_name,
+                email,
+                nationality as country,
+                rut,
+                passport_number,
+                biography,
+                profile_picture_url,
+                phone_number,
+                biography_extend
+            FROM users 
+            WHERE username = %s
+        """, (username,))
+        
+        user = cursor.fetchone()
+        
+        if not user:
+            return jsonify({"error": "Usuario no encontrado"}), 404
+        
+        # Extraer datos adicionales del JSON biography_extend si existe
+        region = None
+        postcode = None
+        
+        if user['biography_extend']:
+            bio_extend = user['biography_extend']
+            if isinstance(bio_extend, dict):
+                region = bio_extend.get('region')
+                postcode = bio_extend.get('postcode')
+        
+        # Formatear respuesta
+        formatted_user = {
+            "id": str(user['id']),
+            "username": user['username'],
+            "displayName": f"{user['first_name']} {user['last_name']}",
+            "firstName": user['first_name'],
+            "lastName": user['last_name'],
+            "email": user['email'],
+            "country": user['country'] or "Chile",
+            "region": region or "Santiago",
+            "postcode": postcode or "",
+            "biography": user['biography'],
+            "profilePicture": user['profile_picture_url'],
+            "phoneNumber": user['phone_number'],
+            "identification": {
+                "rut": user['rut'],
+                "passportNumber": user['passport_number']
+            }
+        }
+        
+        return jsonify(formatted_user), 200
+
+    except Exception as e:
+        import traceback
+        error_details = traceback.format_exc()
+        print(f"Error en get_user_profile: {str(e)}\n{error_details}")
+        return jsonify({"error": "Error interno al obtener perfil de usuario", "details": str(e)}), 500
+    finally:
+        if 'cursor' in locals(): cursor.close()
+        if connection: connection.close()
+
+@app.route('/api/user-profile/<string:username>', methods=['PUT'])
+def update_user_profile(username):
+    connection = get_db_connection()
+    if not connection:
+        return jsonify({"error": "Database connection failed"}), 500
+
+    try:
+        # Obtener datos del request
+        data = request.json
+        if not data:
+            return jsonify({"error": "No se proporcionaron datos"}), 400
+        
+        cursor = connection.cursor(cursor_factory=RealDictCursor)
+        
+        # Verificar que el usuario existe
+        cursor.execute("SELECT id, biography_extend FROM users WHERE username = %s", (username,))
+        user = cursor.fetchone()
+        
+        if not user:
+            return jsonify({"error": "Usuario no encontrado"}), 404
+        
+        # Preparar campos para actualizar
+        update_fields = []
+        update_values = []
+        
+        # Verificar y añadir los campos a actualizar
+        if 'displayName' in data:
+            # Dividir el displayName en first_name y last_name
+            names = data['displayName'].split(' ', 1)
+            first_name = names[0]
+            last_name = names[1] if len(names) > 1 else ""
+            
+            update_fields.append("first_name = %s")
+            update_values.append(first_name)
+            
+            update_fields.append("last_name = %s")
+            update_values.append(last_name)
+        
+        if 'email' in data:
+            update_fields.append("email = %s")
+            update_values.append(data['email'])
+        
+        if 'country' in data:
+            update_fields.append("nationality = %s")
+            update_values.append(data['country'])
+        
+        # Preparar datos para biography_extend (JSONB)
+        biography_extend = user['biography_extend'] or {}
+        
+        if isinstance(biography_extend, str):
+            import json
+            biography_extend = json.loads(biography_extend)
+        
+        if 'region' in data:
+            biography_extend['region'] = data['region']
+        
+        if 'postcode' in data:
+            biography_extend['postcode'] = data['postcode']
+        
+        # Añadir biography_extend a los campos a actualizar
+        update_fields.append("biography_extend = %s")
+        update_values.append(Json(biography_extend))
+        
+        # Añadir username al final de los valores para la cláusula WHERE
+        update_values.append(username)
+        
+        # Construir y ejecutar la consulta
+        if update_fields:
+            query = f"UPDATE users SET {', '.join(update_fields)} WHERE username = %s RETURNING id"
+            cursor.execute(query, update_values)
+            connection.commit()
+            
+            return jsonify({"message": "Perfil actualizado correctamente"}), 200
+        else:
+            return jsonify({"message": "No hay cambios para aplicar"}), 200
+
+    except Exception as e:
+        if connection:
+            connection.rollback()
+        import traceback
+        error_details = traceback.format_exc()
+        print(f"Error en update_user_profile: {str(e)}\n{error_details}")
+        return jsonify({"error": "Error interno al actualizar perfil de usuario", "details": str(e)}), 500
+    finally:
+        if 'cursor' in locals(): cursor.close()
+        if connection: connection.close()
 
 @app.route('/register', methods=['POST'])
 def register():
