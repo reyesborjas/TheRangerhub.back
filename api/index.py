@@ -2124,7 +2124,78 @@ def edit_trip(trip_id):
         cursor.close()
         connection.close()
 
+@app.route('/rangers/<string:ranger_id>', methods=['GET'])
+def get_ranger_details(ranger_id):
+    connection = get_db_connection()
+    if not connection:
+        return jsonify({"error": "Database connection failed"}), 500
 
+    try:
+        cursor = connection.cursor(cursor_factory=RealDictCursor)
+        
+        # Obtener detalles del ranger por ID
+        cursor.execute("""
+            SELECT 
+                u.id, 
+                u.first_name, 
+                u.last_name, 
+                u.username,
+                u.email,
+                u.phone_number,
+                u.nationality,
+                u.biography,
+                u.profile_picture_url,
+                u.availability_start_date,
+                u.availability_end_date,
+                u.user_status,
+                u.biography_extend,
+                u.calification
+            FROM users u
+            WHERE u.id = %s
+        """, (ranger_id,))
+        
+        ranger = cursor.fetchone()
+        
+        if not ranger:
+            return jsonify({"error": "Ranger no encontrado"}), 404
+        
+        # Extraer datos del campo JSONB biography_extend
+        specialties = []
+        languages = []
+        
+        if ranger['biography_extend']:
+            bio_extend = ranger['biography_extend']
+            specialties = bio_extend.get('specialties', [])
+            languages = bio_extend.get('languages', [])
+        
+        # Formatear la respuesta
+        formatted_ranger = {
+            "id": str(ranger['id']),
+            "name": f"{ranger['first_name']} {ranger['last_name']}",
+            "username": ranger['username'],
+            "title": ranger['biography_extend'].get('title', "Guía Profesional") if ranger['biography_extend'] else "Guía Profesional",
+            "photo": ranger['profile_picture_url'] or "https://via.placeholder.com/150?text=Ranger",
+            "email": ranger['email'],
+            "phone": ranger['phone_number'] or "+56 9 xxxx xxxx",
+            "location": ranger['nationality'] or "Chile",
+            "isAvailable": ranger['user_status'] == 'activo',
+            "bio": ranger['biography'] or "Guía profesional con experiencia",
+            "rating": float(ranger['calification']) if ranger['calification'] else 0.0,
+            "trips": 0,  # Esto debería ser calculado
+            "specialties": specialties,
+            "languages": languages,
+            "certifications": []  # Podrías cargar esto aquí o en una petición separada
+        }
+        
+        return jsonify(formatted_ranger), 200
+
+    except Exception as e:
+        logging.error(f"Error en /rangers/{ranger_id}: {str(e)}")
+        return jsonify({"error": "Error interno al obtener detalles del ranger"}), 500
+    finally:
+        if 'cursor' in locals(): cursor.close()
+        if connection: connection.close()
+        
 # 1. Ruta para obtener las certificaciones de un ranger específico
 @app.route('/rangers/<string:ranger_id>/certifications', methods=['GET'])
 def get_ranger_certifications(ranger_id):
