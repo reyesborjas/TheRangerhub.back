@@ -2664,6 +2664,60 @@ def rate_ranger_trip(ranger_id, trip_id):
     finally:
         if 'cursor' in locals(): cursor.close()
         if connection: connection.close()
+@app.route('/api/guide-certifications/<string:guide_id>', methods=['GET'])
+def fetch_guide_certifications(guide_id):
+    connection = get_db_connection()
+    if not connection:
+        return jsonify({"error": "Database connection failed"}), 500
+
+    try:
+        cursor = connection.cursor(cursor_factory=RealDictCursor)
         
+        # Verificar que el ranger/guía existe
+        cursor.execute("SELECT id FROM users WHERE id = %s", (guide_id,))
+        if not cursor.fetchone():
+            return jsonify({"error": "Guía no encontrado"}), 404
+        
+        # Obtener certificaciones del guía
+        cursor.execute("""
+            SELECT 
+                c.id,
+                c.title,
+                c.issued_by,
+                c.issued_date,
+                c.valid_until,
+                c.certification_number,
+                c.document_url
+            FROM certifications c
+            JOIN ranger_certifications rc ON c.id = rc.certification_id
+            WHERE rc.user_id = %s
+            ORDER BY c.valid_until DESC
+        """, (guide_id,))
+        
+        certifications = cursor.fetchall()
+        
+        # Formatear fechas para JSON
+        formatted_certifications = []
+        for cert in certifications:
+            formatted_cert = dict(cert)
+            if formatted_cert['issued_date']:
+                formatted_cert['issued_date'] = formatted_cert['issued_date'].isoformat()
+            if formatted_cert['valid_until']:
+                formatted_cert['valid_until'] = formatted_cert['valid_until'].isoformat()
+            formatted_cert['id'] = str(formatted_cert['id'])
+            formatted_certifications.append(formatted_cert)
+        
+        return jsonify({"certifications": formatted_certifications}), 200
+
+    except Exception as e:
+        # Manejo de errores
+        import traceback
+        error_details = traceback.format_exc()
+        print(f"Error en fetch_guide_certifications: {str(e)}\n{error_details}")
+        return jsonify({"error": "Error interno al obtener certificaciones"}), 500
+    finally:
+        if 'cursor' in locals(): cursor.close()
+        if connection: connection.close()
+                
 if __name__ == "__main__":
     app.run(host="0.0.0.0", debug=True, port=5000)
