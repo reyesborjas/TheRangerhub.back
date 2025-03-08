@@ -783,7 +783,7 @@ def create_or_update_trip():
         connection.close()
         
 @app.route('/rangers', methods=['GET'])
-def get_rangers_basic():
+def get_rangers():
     connection = get_db_connection()
     if not connection:
         return jsonify({"error": "Database connection failed"}), 500
@@ -791,35 +791,72 @@ def get_rangers_basic():
     try:
         cursor = connection.cursor(cursor_factory=RealDictCursor)
         
-        # Consulta simplificada
+        # 1. Obtener ID del rol Ranger
+        cursor.execute("SELECT id FROM user_roles WHERE role_name = 'Ranger'")
+        role = cursor.fetchone()
+        
+        if not role or 'id' not in role:
+            return jsonify({"error": "Rol Ranger no configurado"}), 404
+
+        # 2. Query mejorada con más información
         cursor.execute("""
             SELECT 
                 u.id, 
                 u.first_name, 
                 u.last_name, 
+                u.username,
                 u.email,
-                u.user_status
+                u.phone_number,
+                u.nationality,
+                u.biography,
+                u.profile_picture_url,
+                u.availability_start_date,
+                u.availability_end_date,
+                u.user_status,
+                u.biography_extend,
+                u.calification,
+                COUNT(rc.id) as trips
             FROM users u
-            JOIN user_roles ur ON u.role_id = ur.id
-            WHERE ur.role_name = 'Ranger'
-        """)
+            LEFT JOIN ranger_califications rc ON u.id = rc.user_id
+            WHERE u.role_id = %s
+            GROUP BY u.id
+        """, (role['id'],))
 
         rangers = cursor.fetchall()
         formatted_rangers = []
         
         for r in rangers:
+            # Verificar disponibilidad
+            is_available = r['user_status'] == 'activo'
+            
+            # Extraer datos de JSONB
+            specialties = []
+            languages = []
+            title = "Guía Profesional"
+            
+            if r['biography_extend']:
+                bio_extend = r['biography_extend']
+                if isinstance(bio_extend, dict):
+                    specialties = bio_extend.get('specialties', [])
+                    languages = bio_extend.get('languages', [])
+                    title = bio_extend.get('title', "Guía Profesional")
+            
             ranger_info = {
                 "id": str(r['id']),
                 "name": f"{r['first_name']} {r['last_name']}",
+                "username": r['username'],
+                "title": title,
+                "photo": r['profile_picture_url'] or "https://randomuser.me/api/portraits/men/32.jpg",
                 "email": r['email'],
-                "isAvailable": r['user_status'] == 'activo',
-                "photo": "https://via.placeholder.com/150?text=Ranger",
-                "title": "Guía Profesional",
-                "rating": 4.5,
-                "trips": 50,
-                "specialties": ["Montañismo", "Senderismo"],
-                "languages": ["Español", "Inglés"],
-                "certifications": ["Primeros Auxilios"]
+                "phone": r['phone_number'] or "No disponible",
+                "location": r['nationality'] or "Chile",
+                "isAvailable": is_available,
+                "bio": r['biography'] or "Guía profesional con experiencia en rutas de montaña y senderismo.",
+                "rating": float(r['calification']) if r['calification'] else 4.5,
+                "trips": r['trips'] or 0,
+                "specialties": specialties,
+                "languages": languages,
+                "certifications": ["Certificado Profesional"]  # Dato estático temporal
             }
             
             formatted_rangers.append(ranger_info)
@@ -829,7 +866,7 @@ def get_rangers_basic():
     except Exception as e:
         import traceback
         error_details = traceback.format_exc()
-        logging.error(f"Error en get_rangers_basic: {str(e)}\n{error_details}")
+        logging.error(f"Error en /rangers: {str(e)}\n{error_details}")
         return jsonify({"error": "Error interno al obtener rangers", "details": str(e)}), 500
     finally:
         if 'cursor' in locals(): cursor.close()
