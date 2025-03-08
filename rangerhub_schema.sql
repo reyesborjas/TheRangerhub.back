@@ -24,8 +24,10 @@ CREATE TABLE users (
     availability_end_date date,
     user_status VARCHAR(50) NOT NULL DEFAULT 'activo',
     profile_picture_url varchar(255) UNIQUE,
-    profile_visibility BOOLEAN NOT NULL DEFAULT TRUE   
-    phone_number varchar(25) UNIQUE
+    profile_visibility BOOLEAN NOT NULL DEFAULT TRUE,
+    phone_number varchar(25) UNIQUE,
+    biography_extend jsonb,
+    calification numeric(2,1)
 );
 
 
@@ -144,6 +146,13 @@ CREATE TABLE ranger_certifications (
     user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     UNIQUE(certification_id, user_id)
 );
+
+create table ranger_califications (
+id uuid default uuid_generate_va() primary ke,
+trip_id uuid not null references trips(id) on delete cascade,
+user_id uuid not null references users(id) on delete cascade,
+calification numeric(2,1) not null
+)
 
 CREATE TABLE ranger_activities (
     id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,

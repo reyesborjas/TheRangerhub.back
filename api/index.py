@@ -1,17 +1,19 @@
-from flask import Flask, request, jsonify
-import psycopg2
 import os
+import uuid
 import hashlib
-import jwt
 import datetime
 import logging
-from psycopg2.extras import RealDictCursor
-from dotenv import load_dotenv
-from flask_cors import CORS
-import uuid
 import json
-load_dotenv()
 
+import jwt
+import psycopg2
+from psycopg2.extras import RealDictCursor, Json
+
+from flask import Flask, request, jsonify
+from flask_cors import CORS
+from dotenv import load_dotenv
+
+load_dotenv()
 app = Flask(__name__)
 # Combined CORS configuration
 CORS(app)
@@ -2122,5 +2124,428 @@ def edit_trip(trip_id):
         cursor.close()
         connection.close()
 
+
+# 1. Ruta para obtener las certificaciones de un ranger específico
+@app.route('/rangers/<string:ranger_id>/certifications', methods=['GET'])
+def get_ranger_certifications(ranger_id):
+    connection = get_db_connection()
+    if not connection:
+        return jsonify({"error": "Database connection failed"}), 500
+
+    try:
+        cursor = connection.cursor(cursor_factory=RealDictCursor)
+        
+        # Verificar que el ranger existe y tiene rol de ranger
+        cursor.execute("""
+            SELECT u.id FROM users u
+            JOIN user_roles ur ON u.role_id = ur.id
+            WHERE u.id = %s AND ur.role_name = 'Ranger'
+        """, (ranger_id,))
+        
+        if not cursor.fetchone():
+            return jsonify({"error": "Ranger no encontrado"}), 404
+        
+        # Obtener certificaciones del ranger
+        cursor.execute("""
+            SELECT 
+                c.id,
+                c.title,
+                c.issued_by,
+                c.issued_date,
+                c.valid_until,
+                c.certification_number,
+                c.document_url
+            FROM certifications c
+            JOIN ranger_certifications rc ON c.id = rc.certification_id
+            WHERE rc.user_id = %s
+            ORDER BY c.valid_until DESC
+        """, (ranger_id,))
+        
+        certifications = cursor.fetchall()
+        
+        # Formatear fechas para JSON
+        for cert in certifications:
+            cert['issued_date'] = cert['issued_date'].isoformat() if cert['issued_date'] else None
+            cert['valid_until'] = cert['valid_until'].isoformat() if cert['valid_until'] else None
+            cert['id'] = str(cert['id'])
+        
+        return jsonify({"certifications": certifications}), 200
+
+    except Exception as e:
+        logging.error(f"Error en /rangers/{ranger_id}/certifications: {str(e)}")
+        return jsonify({"error": "Error interno al obtener certificaciones"}), 500
+    finally:
+        if 'cursor' in locals(): cursor.close()
+        if connection: connection.close()
+
+# 2. Ruta para actualizar la disponibilidad de un ranger
+@app.route('/rangers/<string:ranger_id>/availability', methods=['PUT'])
+def update_ranger_availability(ranger_id):
+    connection = get_db_connection()
+    if not connection:
+        return jsonify({"error": "Database connection failed"}), 500
+    
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"error": "Datos no proporcionados"}), 400
+        
+        # Validar datos
+        start_date = data.get('start_date')
+        end_date = data.get('end_date')
+        
+        cursor = connection.cursor()
+        
+        # Verificar que el ranger existe
+        cursor.execute("SELECT id FROM users WHERE id = %s", (ranger_id,))
+        if not cursor.fetchone():
+            return jsonify({"error": "Ranger no encontrado"}), 404
+        
+        # Actualizar disponibilidad
+        cursor.execute("""
+            UPDATE users 
+            SET 
+                availability_start_date = %s,
+                availability_end_date = %s
+            WHERE id = %s
+        """, (start_date, end_date, ranger_id))
+        
+        connection.commit()
+        
+        return jsonify({
+            "message": "Disponibilidad actualizada correctamente",
+            "availability": {
+                "start_date": start_date,
+                "end_date": end_date
+            }
+        }), 200
+        
+    except Exception as e:
+        if connection:
+            connection.rollback()
+        logging.error(f"Error en update_ranger_availability: {str(e)}")
+        return jsonify({"error": "Error al actualizar disponibilidad"}), 500
+    finally:
+        if 'cursor' in locals(): cursor.close()
+        if connection: connection.close()
+
+# 3. Ruta para actualizar el biography_extend de un ranger
+@app.route('/rangers/<string:ranger_id>/profile', methods=['PUT'])
+def update_ranger_profile(ranger_id):
+    connection = get_db_connection()
+    if not connection:
+        return jsonify({"error": "Database connection failed"}), 500
+    
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"error": "Datos no proporcionados"}), 400
+        
+        cursor = connection.cursor()
+        
+        # Verificar que el ranger existe
+        cursor.execute("SELECT id, biography_extend FROM users WHERE id = %s", (ranger_id,))
+        result = cursor.fetchone()
+        
+        if not result:
+            return jsonify({"error": "Ranger no encontrado"}), 404
+        
+        # Obtener el biography_extend actual o inicializarlo si es None
+        current_bio_extend = result[1] if result[1] else {}
+        
+        # Actualizar los campos proporcionados en biography_extend
+        specialties = data.get('specialties')
+        languages = data.get('languages')
+        title = data.get('title')
+        
+        if specialties is not None:
+            current_bio_extend['specialties'] = specialties
+            
+        if languages is not None:
+            current_bio_extend['languages'] = languages
+            
+        if title is not None:
+            current_bio_extend['title'] = title
+        
+        # Actualizar biography_extend en la base de datos
+        cursor.execute("""
+            UPDATE users 
+            SET biography_extend = %s
+            WHERE id = %s
+        """, (Json(current_bio_extend), ranger_id))
+        
+        connection.commit()
+        
+        return jsonify({
+            "message": "Perfil actualizado correctamente",
+            "biography_extend": current_bio_extend
+        }), 200
+        
+    except Exception as e:
+        if connection:
+            connection.rollback()
+        logging.error(f"Error en update_ranger_profile: {str(e)}")
+        return jsonify({"error": "Error al actualizar perfil"}), 500
+    finally:
+        if 'cursor' in locals(): cursor.close()
+        if connection: connection.close()
+
+# 4. Ruta para obtener los viajes de un ranger
+@app.route('/rangers/<string:ranger_id>/trips', methods=['GET'])
+def get_ranger_trips(ranger_id):
+    connection = get_db_connection()
+    if not connection:
+        return jsonify({"error": "Database connection failed"}), 500
+    
+    try:
+        cursor = connection.cursor(cursor_factory=RealDictCursor)
+        
+        # Verificar que el ranger existe
+        cursor.execute("SELECT id FROM users WHERE id = %s", (ranger_id,))
+        if not cursor.fetchone():
+            return jsonify({"error": "Ranger no encontrado"}), 404
+        
+        # Obtener viajes del ranger
+        # Suponiendo que hay una relación entre trips y rangers
+        cursor.execute("""
+            SELECT 
+                t.id,
+                t.trip_name,
+                t.start_date,
+                t.end_date,
+                t.status,
+                AVG(rc.calification) as avg_rating,
+                COUNT(rc.id) as review_count
+            FROM trips t
+            LEFT JOIN ranger_califications rc ON t.id = rc.trip_id
+            WHERE t.ranger_id = %s
+            GROUP BY t.id
+            ORDER BY t.start_date DESC
+        """, (ranger_id,))
+        
+        trips = cursor.fetchall()
+        
+        # Formatear fechas para JSON y convertir UUID a string
+        for trip in trips:
+            trip['start_date'] = trip['start_date'].isoformat() if trip['start_date'] else None
+            trip['end_date'] = trip['end_date'].isoformat() if trip['end_date'] else None
+            trip['id'] = str(trip['id'])
+            trip['avg_rating'] = float(trip['avg_rating']) if trip['avg_rating'] else 0.0
+        
+        return jsonify({"trips": trips}), 200
+        
+    except Exception as e:
+        logging.error(f"Error en get_ranger_trips: {str(e)}")
+        return jsonify({"error": "Error al obtener viajes"}), 500
+    finally:
+        if 'cursor' in locals(): cursor.close()
+        if connection: connection.close()
+
+# 5. Ruta para añadir certificación a un ranger
+@app.route('/rangers/<string:ranger_id>/certifications', methods=['POST'])
+def add_ranger_certification(ranger_id):
+    connection = get_db_connection()
+    if not connection:
+        return jsonify({"error": "Database connection failed"}), 500
+    
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"error": "Datos no proporcionados"}), 400
+        
+        # Validar datos mínimos necesarios
+        required_fields = ['title', 'issued_by', 'issued_date', 'valid_until']
+        for field in required_fields:
+            if field not in data:
+                return jsonify({"error": f"Campo requerido: {field}"}), 400
+        
+        cursor = connection.cursor(cursor_factory=RealDictCursor)
+        
+        # Verificar que el ranger existe
+        cursor.execute("SELECT id FROM users WHERE id = %s", (ranger_id,))
+        if not cursor.fetchone():
+            return jsonify({"error": "Ranger no encontrado"}), 404
+        
+        # Primero insertamos la certificación
+        cursor.execute("""
+            INSERT INTO certifications (
+                title, 
+                issued_by, 
+                issued_date, 
+                valid_until, 
+                certification_number, 
+                document_url
+            ) VALUES (%s, %s, %s, %s, %s, %s)
+            RETURNING id
+        """, (
+            data['title'],
+            data['issued_by'],
+            data['issued_date'],
+            data['valid_until'],
+            data.get('certification_number'),
+            data.get('document_url')
+        ))
+        
+        certification_id = cursor.fetchone()['id']
+        
+        # Luego vinculamos la certificación con el ranger
+        cursor.execute("""
+            INSERT INTO ranger_certifications (
+                certification_id,
+                user_id
+            ) VALUES (%s, %s)
+            RETURNING id
+        """, (certification_id, ranger_id))
+        
+        connection.commit()
+        
+        return jsonify({
+            "message": "Certificación añadida correctamente",
+            "certification_id": str(certification_id)
+        }), 201
+        
+    except Exception as e:
+        if connection:
+            connection.rollback()
+        logging.error(f"Error en add_ranger_certification: {str(e)}")
+        return jsonify({"error": "Error al añadir certificación"}), 500
+    finally:
+        if 'cursor' in locals(): cursor.close()
+        if connection: connection.close()
+
+# 6. Ruta para actualizar la calificación de un ranger
+@app.route('/rangers/<string:ranger_id>/rating', methods=['PUT'])
+def update_ranger_rating(ranger_id):
+    connection = get_db_connection()
+    if not connection:
+        return jsonify({"error": "Database connection failed"}), 500
+    
+    try:
+        data = request.get_json()
+        if not data or 'rating' not in data:
+            return jsonify({"error": "Calificación no proporcionada"}), 400
+        
+        rating = data['rating']
+        # Validar que la calificación esté en el rango correcto
+        if not isinstance(rating, (int, float)) or rating < 0 or rating > 5:
+            return jsonify({"error": "La calificación debe ser un número entre 0 y 5"}), 400
+        
+        cursor = connection.cursor()
+        
+        # Verificar que el ranger existe
+        cursor.execute("SELECT id FROM users WHERE id = %s", (ranger_id,))
+        if not cursor.fetchone():
+            return jsonify({"error": "Ranger no encontrado"}), 404
+        
+        # Actualizar calificación
+        cursor.execute("""
+            UPDATE users 
+            SET calification = %s
+            WHERE id = %s
+        """, (rating, ranger_id))
+        
+        connection.commit()
+        
+        return jsonify({
+            "message": "Calificación actualizada correctamente",
+            "rating": rating
+        }), 200
+        
+    except Exception as e:
+        if connection:
+            connection.rollback()
+        logging.error(f"Error en update_ranger_rating: {str(e)}")
+        return jsonify({"error": "Error al actualizar calificación"}), 500
+    finally:
+        if 'cursor' in locals(): cursor.close()
+        if connection: connection.close()
+
+# 7. Ruta para actualizar la calificación de un ranger por un viaje específico
+@app.route('/rangers/<string:ranger_id>/trips/<string:trip_id>/rating', methods=['POST'])
+def rate_ranger_trip(ranger_id, trip_id):
+    connection = get_db_connection()
+    if not connection:
+        return jsonify({"error": "Database connection failed"}), 500
+    
+    try:
+        data = request.get_json()
+        if not data or 'rating' not in data:
+            return jsonify({"error": "Calificación no proporcionada"}), 400
+        
+        rating = data['rating']
+        # Validar que la calificación esté en el rango correcto
+        if not isinstance(rating, (int, float)) or rating < 0 or rating > 5:
+            return jsonify({"error": "La calificación debe ser un número entre 0 y 5"}), 400
+        
+        # Obtener el ID del usuario que califica (del token JWT)
+        # user_id = get_jwt_identity()  # Ejemplo si usas Flask-JWT-Extended
+        user_id = data.get('user_id')  # Por ahora lo tomamos del cuerpo de la petición
+        
+        if not user_id:
+            return jsonify({"error": "Se requiere ID de usuario"}), 400
+        
+        cursor = connection.cursor()
+        
+        # Verificar que el ranger y el viaje existen
+        cursor.execute("""
+            SELECT u.id AS ranger_id, t.id AS trip_id
+            FROM users u, trips t
+            WHERE u.id = %s AND t.id = %s
+        """, (ranger_id, trip_id))
+        
+        if not cursor.fetchone():
+            return jsonify({"error": "Ranger o viaje no encontrado"}), 404
+        
+        # Verificar si ya existe una calificación para este usuario, ranger y viaje
+        cursor.execute("""
+            SELECT id FROM ranger_califications
+            WHERE user_id = %s AND trip_id = %s
+        """, (user_id, trip_id))
+        
+        existing_rating = cursor.fetchone()
+        
+        if existing_rating:
+            # Actualizar calificación existente
+            cursor.execute("""
+                UPDATE ranger_califications
+                SET calification = %s
+                WHERE user_id = %s AND trip_id = %s
+            """, (rating, user_id, trip_id))
+            message = "Calificación actualizada correctamente"
+        else:
+            # Crear nueva calificación
+            cursor.execute("""
+                INSERT INTO ranger_califications (user_id, trip_id, calification)
+                VALUES (%s, %s, %s)
+            """, (user_id, trip_id, rating))
+            message = "Calificación registrada correctamente"
+        
+        # Actualizar el promedio de calificación del ranger
+        cursor.execute("""
+            UPDATE users
+            SET calification = (
+                SELECT AVG(calification)
+                FROM ranger_califications
+                WHERE trip_id IN (SELECT id FROM trips WHERE ranger_id = %s)
+            )
+            WHERE id = %s
+        """, (ranger_id, ranger_id))
+        
+        connection.commit()
+        
+        return jsonify({
+            "message": message,
+            "rating": rating
+        }), 200
+        
+    except Exception as e:
+        if connection:
+            connection.rollback()
+        logging.error(f"Error en rate_ranger_trip: {str(e)}")
+        return jsonify({"error": "Error al registrar calificación"}), 500
+    finally:
+        if 'cursor' in locals(): cursor.close()
+        if connection: connection.close()
+        
 if __name__ == "__main__":
     app.run(host="0.0.0.0", debug=True, port=5000)
