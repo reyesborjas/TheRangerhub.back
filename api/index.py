@@ -151,7 +151,7 @@ def update_user_profile(username):
         
         cursor = connection.cursor(cursor_factory=RealDictCursor)
         
-        # Verificar que el usuario existe
+        # Verificar que el usuario existe y obtener sus datos actuales
         cursor.execute("SELECT id, biography_extend FROM users WHERE username = %s", (username,))
         user = cursor.fetchone()
         
@@ -179,35 +179,51 @@ def update_user_profile(username):
             update_fields.append("email = %s")
             update_values.append(data['email'])
         
+        # País se guarda en nationality
         if 'country' in data:
             update_fields.append("nationality = %s")
             update_values.append(data['country'])
         
         # Preparar datos para biography_extend (JSONB)
-        biography_extend = user['biography_extend'] or {}
+        bio_extend = user['biography_extend'] or {}
         
-        if isinstance(biography_extend, str):
+        # Asegurarnos de que bio_extend sea un diccionario
+        if isinstance(bio_extend, str):
             import json
-            biography_extend = json.loads(biography_extend)
+            bio_extend = json.loads(bio_extend)
+        elif bio_extend is None:
+            bio_extend = {}
         
+        # Añadir región y código postal a biography_extend
+        changed = False
         if 'region' in data:
-            biography_extend['region'] = data['region']
+            bio_extend['region'] = data['region']
+            changed = True
         
         if 'postcode' in data:
-            biography_extend['postcode'] = data['postcode']
+            bio_extend['postcode'] = data['postcode']
+            changed = True
         
-        # Añadir biography_extend a los campos a actualizar
-        update_fields.append("biography_extend = %s")
-        update_values.append(Json(biography_extend))
+        # Actualizar biography_extend solo si cambió
+        if changed:
+            update_fields.append("biography_extend = %s")
+            from psycopg2.extras import Json
+            update_values.append(Json(bio_extend))
         
         # Añadir username al final de los valores para la cláusula WHERE
         update_values.append(username)
         
-        # Construir y ejecutar la consulta
+        # Construir y ejecutar la consulta solo si hay campos a actualizar
         if update_fields:
             query = f"UPDATE users SET {', '.join(update_fields)} WHERE username = %s RETURNING id"
             cursor.execute(query, update_values)
             connection.commit()
+            
+            # Imprimir información de depuración
+            print(f"Usuario actualizado: {username}")
+            print(f"Campos actualizados: {update_fields}")
+            print(f"Valores nuevos: {update_values[:-1]}")  # Excluir el username del final
+            print(f"biography_extend actualizado: {bio_extend}")
             
             return jsonify({"message": "Perfil actualizado correctamente"}), 200
         else:
