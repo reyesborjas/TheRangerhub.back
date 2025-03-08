@@ -783,7 +783,7 @@ def create_or_update_trip():
         connection.close()
         
 @app.route('/rangers', methods=['GET'])
-def get_rangers():
+def get_rangers_basic():
     connection = get_db_connection()
     if not connection:
         return jsonify({"error": "Database connection failed"}), 500
@@ -791,36 +791,46 @@ def get_rangers():
     try:
         cursor = connection.cursor(cursor_factory=RealDictCursor)
         
-        # 1. Obtener ID del rol Ranger
-        cursor.execute("SELECT id FROM user_roles WHERE role_name = 'Ranger'")
-        role = cursor.fetchone()
-        
-        if not role or 'id' not in role:
-            return jsonify({"error": "Rol Ranger no configurado"}), 404
-
-        # 2. Query corregida
+        # Consulta simplificada
         cursor.execute("""
-            SELECT id, first_name, last_name, username 
-            FROM users 
-            WHERE role_id = %s
-            AND user_status = 'activo'  -- Filtro adicional
-        """, (role['id'],))
+            SELECT 
+                u.id, 
+                u.first_name, 
+                u.last_name, 
+                u.email,
+                u.user_status
+            FROM users u
+            JOIN user_roles ur ON u.role_id = ur.id
+            WHERE ur.role_name = 'Ranger'
+        """)
 
-        # 3. Formatear respuesta
         rangers = cursor.fetchall()
-        return jsonify({
-            "rangers": [
-                {
-                    "id": str(r['id']),
-                    "full_name": f"{r['first_name']} {r['last_name']}",
-                    "username": r['username']
-                } for r in rangers
-            ]
-        }), 200
+        formatted_rangers = []
+        
+        for r in rangers:
+            ranger_info = {
+                "id": str(r['id']),
+                "name": f"{r['first_name']} {r['last_name']}",
+                "email": r['email'],
+                "isAvailable": r['user_status'] == 'activo',
+                "photo": "https://via.placeholder.com/150?text=Ranger",
+                "title": "Guía Profesional",
+                "rating": 4.5,
+                "trips": 50,
+                "specialties": ["Montañismo", "Senderismo"],
+                "languages": ["Español", "Inglés"],
+                "certifications": ["Primeros Auxilios"]
+            }
+            
+            formatted_rangers.append(ranger_info)
+        
+        return jsonify({"rangers": formatted_rangers}), 200
 
     except Exception as e:
-        logging.error(f"Error en /rangers: {str(e)}")
-        return jsonify({"error": "Error interno al obtener rangers"}), 500
+        import traceback
+        error_details = traceback.format_exc()
+        logging.error(f"Error en get_rangers_basic: {str(e)}\n{error_details}")
+        return jsonify({"error": "Error interno al obtener rangers", "details": str(e)}), 500
     finally:
         if 'cursor' in locals(): cursor.close()
         if connection: connection.close()
