@@ -93,7 +93,8 @@ def get_user_profile(username):
                 country,
                 region_state,
                 profile_picture_url,
-                biography_extend
+                biography_extend,
+                languages
             FROM users 
             WHERE username = %s
         """, (username,))
@@ -105,6 +106,7 @@ def get_user_profile(username):
         
         # Extraer datos del JSON biography_extend si existe
         postcode = ""
+        bio_languages = []
         
         if user['biography_extend']:
             bio_extend = user['biography_extend']
@@ -115,10 +117,23 @@ def get_user_profile(username):
                     bio_extend = json.loads(bio_extend)
                     if isinstance(bio_extend, dict):
                         postcode = bio_extend.get('postcode', "")
+                        if 'languages' in bio_extend and isinstance(bio_extend['languages'], list):
+                            bio_languages = bio_extend['languages']
                 except:
                     pass
             elif isinstance(bio_extend, dict):
                 postcode = bio_extend.get('postcode', "")
+                if 'languages' in bio_extend and isinstance(bio_extend['languages'], list):
+                    bio_languages = bio_extend['languages']
+        
+        # Obtener idiomas del campo languages (lista de strings) o del array en biography_extend
+        languages = user['languages'] if user['languages'] else bio_languages
+        
+        # Si languages es un string de PostgreSQL con formato de array, convertirlo a lista Python
+        if isinstance(languages, str) and languages.startswith('{') and languages.endswith('}'):
+            languages = languages.strip('{}').split(',')
+            # Limpiar posibles comillas
+            languages = [lang.strip('"\'') for lang in languages if lang.strip()]
         
         # Formatear respuesta correctamente
         formatted_user = {
@@ -127,11 +142,12 @@ def get_user_profile(username):
             "lastName": user['last_name'],
             "displayName": f"{user['first_name']} {user['last_name']}",
             "email": user['email'],
-            "nationality": user['nationality'] or "Chile",  # Usar campo correcto para nacionalidad
-            "country": user['country'] or user['nationality'] or "Chile",  # Preferir country, con fallback a nationality
+            "nationality": user['nationality'] or "Chile",
+            "country": user['country'] or user['nationality'] or "Chile",
             "region": user['region_state'] or "Santiago",
             "postcode": postcode,
-            "profilePicture": user['profile_picture_url']
+            "profilePicture": user['profile_picture_url'],
+            "languages": languages
         }
         
         return jsonify(formatted_user), 200
@@ -144,6 +160,7 @@ def get_user_profile(username):
     finally:
         if 'cursor' in locals(): cursor.close()
         if connection: connection.close()
+
 
 # Nueva ruta para verificar la disponibilidad del email
 @app.route('/api/check-email-availability', methods=['POST'])
