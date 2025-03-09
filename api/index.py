@@ -63,7 +63,7 @@ def home():
 def about():
     return 'About'
 
-# Ruta final corregida para obtener el perfil de usuario
+# Ruta GET actualizada para especialidades
 
 @app.route('/api/user-profile/<string:username>', methods=['GET'])
 def get_user_profile(username):
@@ -107,6 +107,7 @@ def get_user_profile(username):
         # Extraer datos del JSON biography_extend si existe
         postcode = ""
         bio_languages = []
+        specialities = []
         
         if user['biography_extend']:
             bio_extend = user['biography_extend']
@@ -119,12 +120,16 @@ def get_user_profile(username):
                         postcode = bio_extend.get('postcode', "")
                         if 'languages' in bio_extend and isinstance(bio_extend['languages'], list):
                             bio_languages = bio_extend['languages']
-                except:
-                    pass
+                        if 'specialities' in bio_extend and isinstance(bio_extend['specialities'], list):
+                            specialities = bio_extend['specialities']
+                except Exception as e:
+                    print("Error al parsear biography_extend:", e)
             elif isinstance(bio_extend, dict):
                 postcode = bio_extend.get('postcode', "")
                 if 'languages' in bio_extend and isinstance(bio_extend['languages'], list):
                     bio_languages = bio_extend['languages']
+                if 'specialities' in bio_extend and isinstance(bio_extend['specialities'], list):
+                    specialities = bio_extend['specialities']
         
         # Obtener idiomas del campo languages (lista de strings) o del array en biography_extend
         languages = user['languages'] if user['languages'] else bio_languages
@@ -142,14 +147,15 @@ def get_user_profile(username):
             "lastName": user['last_name'],
             "displayName": f"{user['first_name']} {user['last_name']}",
             "email": user['email'],
-            "nationality": user['nationality'] or "Chile",
-            "country": user['country'] or user['nationality'] or "Chile",
-            "region": user['region_state'] or "Santiago",
+            "nationality": user['nationality'] or "",
+            "country": user['country'] or "",
+            "region": user['region_state'] or "",
             "postcode": postcode,
             "profilePicture": user['profile_picture_url'],
-            "languages": languages
+            "languages": languages,
+            "specialities": specialities
         }
-        
+        print("Respuesta formateada:", formatted_user)
         return jsonify(formatted_user), 200
 
     except Exception as e:
@@ -160,8 +166,7 @@ def get_user_profile(username):
     finally:
         if 'cursor' in locals(): cursor.close()
         if connection: connection.close()
-
-
+        
 # Nueva ruta para verificar la disponibilidad del email
 @app.route('/api/check-email-availability', methods=['POST'])
 def check_email_availability():
@@ -268,9 +273,79 @@ def upload_profile_picture():
         if 'cursor' in locals(): cursor.close()
         if connection: connection.close()
         
-    
+      
+@app.route('/api/certifications', methods=['GET'])
+def get_certifications():
+    connection = get_db_connection()
+    if not connection:
+        return jsonify({"error": "Database connection failed"}), 500
 
-# Ruta final corregida para actualizar el perfil de usuario
+    try:
+        cursor = connection.cursor(cursor_factory=RealDictCursor)
+        
+        # Obtener todas las certificaciones disponibles
+        cursor.execute("""
+            SELECT 
+                id,
+                title,
+                description,
+                certification_entity,
+                created_at
+            FROM certifications
+            ORDER BY title ASC
+        """)
+        
+        certifications = cursor.fetchall()
+        
+        # Formatear IDs para JSON
+        for cert in certifications:
+            cert['id'] = str(cert['id'])
+            cert['created_at'] = cert['created_at'].isoformat() if cert['created_at'] else None
+        
+        return jsonify({"certifications": certifications}), 200
+
+    except Exception as e:
+        logging.error(f"Error en /api/certifications: {str(e)}")
+        return jsonify({"error": "Error interno al obtener certificaciones"}), 500
+    finally:
+        if 'cursor' in locals(): cursor.close()
+        if connection: connection.close()
+        
+@app.route('/register', methods=['POST'])
+def register():
+    """Registra un nuevo usuario"""
+    logging.info("Register attempt received")
+    connection = get_db_connection()
+    if not connection:
+        logging.error("Database connection failed during registration")
+        return jsonify({"message": "Error de conexión con la base de datos"}), 500
+
+    cursor = connection.cursor()
+    try:
+        body = request.get_json()
+        hashed_password = hash_password(body["password"])
+
+        cursor.execute("""
+            INSERT INTO users (
+                username, first_name, last_name, nationality, rut, passport_number, 
+                role_id, biography, email, password
+            ) 
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        """, (body["username"], body["first_name"], body["last_name"], body["nationality"], 
+              body["rut"], body["passport_number"], body["role_id"], 
+              body["biography"], body["email"], hashed_password 
+              ))
+        
+        connection.commit()
+        return jsonify({"message": "Usuario creado correctamente"}), 201
+    except Exception as e:
+        logging.error(f"Error en el registro: {e}")
+        return jsonify({"message": "Error al crear usuario"}), 500
+    finally:
+        cursor.close()
+        connection.close()
+
+# Ruta PUT actualizada para especialidades
 
 @app.route('/api/user-profile/<string:username>', methods=['PUT'])
 def update_user_profile(username):
@@ -344,7 +419,7 @@ def update_user_profile(username):
             from psycopg2.extensions import AsIs
             update_values.append(AsIs("ARRAY[" + ",".join([f"'{lang}'" for lang in data['languages']]) + "]"))
         
-        # Preparar datos para biography_extend (para código postal y también backup de idiomas)
+        # Preparar datos para biography_extend (para código postal, idiomas y especialidades)
         update_biography_extend = False
         bio_extend = {}
         
@@ -367,6 +442,11 @@ def update_user_profile(username):
         # Añadir/actualizar los idiomas en biography_extend también
         if 'languages' in data and isinstance(data['languages'], list):
             bio_extend['languages'] = data['languages']
+            update_biography_extend = True
+        
+        # Añadir/actualizar las especialidades en biography_extend
+        if 'specialities' in data and isinstance(data['specialities'], list):
+            bio_extend['specialities'] = data['specialities']
             update_biography_extend = True
         
         # Añadir a los campos a actualizar si hubo cambios en biography_extend
@@ -402,77 +482,6 @@ def update_user_profile(username):
     finally:
         if 'cursor' in locals(): cursor.close()
         if connection: connection.close()
-            
-@app.route('/api/certifications', methods=['GET'])
-def get_certifications():
-    connection = get_db_connection()
-    if not connection:
-        return jsonify({"error": "Database connection failed"}), 500
-
-    try:
-        cursor = connection.cursor(cursor_factory=RealDictCursor)
-        
-        # Obtener todas las certificaciones disponibles
-        cursor.execute("""
-            SELECT 
-                id,
-                title,
-                description,
-                certification_entity,
-                created_at
-            FROM certifications
-            ORDER BY title ASC
-        """)
-        
-        certifications = cursor.fetchall()
-        
-        # Formatear IDs para JSON
-        for cert in certifications:
-            cert['id'] = str(cert['id'])
-            cert['created_at'] = cert['created_at'].isoformat() if cert['created_at'] else None
-        
-        return jsonify({"certifications": certifications}), 200
-
-    except Exception as e:
-        logging.error(f"Error en /api/certifications: {str(e)}")
-        return jsonify({"error": "Error interno al obtener certificaciones"}), 500
-    finally:
-        if 'cursor' in locals(): cursor.close()
-        if connection: connection.close()
-        
-@app.route('/register', methods=['POST'])
-def register():
-    """Registra un nuevo usuario"""
-    logging.info("Register attempt received")
-    connection = get_db_connection()
-    if not connection:
-        logging.error("Database connection failed during registration")
-        return jsonify({"message": "Error de conexión con la base de datos"}), 500
-
-    cursor = connection.cursor()
-    try:
-        body = request.get_json()
-        hashed_password = hash_password(body["password"])
-
-        cursor.execute("""
-            INSERT INTO users (
-                username, first_name, last_name, nationality, rut, passport_number, 
-                role_id, biography, email, password
-            ) 
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-        """, (body["username"], body["first_name"], body["last_name"], body["nationality"], 
-              body["rut"], body["passport_number"], body["role_id"], 
-              body["biography"], body["email"], hashed_password 
-              ))
-        
-        connection.commit()
-        return jsonify({"message": "Usuario creado correctamente"}), 201
-    except Exception as e:
-        logging.error(f"Error en el registro: {e}")
-        return jsonify({"message": "Error al crear usuario"}), 500
-    finally:
-        cursor.close()
-        connection.close()
 
 @app.route('/roles')
 def get_roles():
