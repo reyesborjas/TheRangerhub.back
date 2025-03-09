@@ -253,7 +253,7 @@ def upload_profile_picture():
         
     
 
-# Ruta final corregida para actualizar el perfil de usuario
+## Ruta final corregida para actualizar el perfil de usuario
 
 @app.route('/api/user-profile/<string:username>', methods=['PUT'])
 def update_user_profile(username):
@@ -305,7 +305,12 @@ def update_user_profile(username):
             update_fields.append("email = %s")
             update_values.append(data['email'])
         
-        # Actualizar país solo en country, no en nationality
+        # Actualizar nacionalidad si se proporciona
+        if 'nationality' in data:
+            update_fields.append("nationality = %s")
+            update_values.append(data['nationality'])
+        
+        # Actualizar país de residencia
         if 'country' in data:
             update_fields.append("country = %s")
             update_values.append(data['country'])
@@ -350,6 +355,7 @@ def update_user_profile(username):
             # Imprimir información de depuración
             print(f"Usuario actualizado: {username}")
             print(f"Campos actualizados: {update_fields}")
+            print(f"Valores actualizados: {update_values[:-1]}")  # Excluir el username del final
             
             return jsonify({"message": "Perfil actualizado correctamente"}), 200
         else:
@@ -365,7 +371,9 @@ def update_user_profile(username):
     finally:
         if 'cursor' in locals(): cursor.close()
         if connection: connection.close()
-              
+
+
+            
 @app.route('/api/certifications', methods=['GET'])
 def get_certifications():
     connection = get_db_connection()
