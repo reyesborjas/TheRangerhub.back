@@ -95,7 +95,7 @@ def update_user_profile(username):
         
         # País se guarda en nationality
         if 'country' in data:
-            update_fields.append("nationality = %s")
+            update_fields.append("country = %s")
             update_values.append(data['country'])
         
         if 'profile_picture_url' in data:
@@ -240,8 +240,9 @@ def get_user_profile(username):
             "firstName": user['first_name'],
             "lastName": user['last_name'],
             "email": user['email'],
-            "country": user['country'] or "Chile",
-            "region": region or "Santiago",
+            "country": user['country'] or "",
+            "nationality": user['nationality'] or "",
+            "region": region or "",
             "postcode": postcode or "",
             "biography": user['biography'],
             "profilePicture": user['profile_picture_url'],
