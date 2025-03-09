@@ -67,7 +67,8 @@ def about():
 
 # Rutas para el manejo del perfil de usuario (SIN usar biography_extend)
 
-# Ruta para obtener el perfil de un usuario específico o el usuario actual
+# Ruta final corregida para obtener el perfil de usuario
+
 @app.route('/api/user-profile/<string:username>', methods=['GET'])
 def get_user_profile(username):
     connection = get_db_connection()
@@ -86,6 +87,7 @@ def get_user_profile(username):
             username = session.get('username')
         
         # Consulta optimizada para obtener solo los campos necesarios
+        # Usando el nombre correcto de la columna: region_state
         cursor.execute("""
             SELECT 
                 username,
@@ -93,7 +95,7 @@ def get_user_profile(username):
                 last_name,
                 email,
                 country,
-                state_province AS region,
+                region_state AS region,
                 profile_picture_url
             FROM users 
             WHERE username = %s
@@ -113,7 +115,7 @@ def get_user_profile(username):
             "email": user['email'],
             "country": user['country'] or "Chile",
             "region": user['region'] or "Santiago",
-            "postcode": "",  # Valor por defecto ya que no usaremos biography_extend
+            "postcode": "",  # Valor por defecto para el código postal
             "profilePicture": user['profile_picture_url']
         }
         
@@ -127,8 +129,6 @@ def get_user_profile(username):
     finally:
         if 'cursor' in locals(): cursor.close()
         if connection: connection.close()
-
-
 # Nueva ruta para verificar la disponibilidad del email
 @app.route('/api/check-email-availability', methods=['POST'])
 def check_email_availability():
