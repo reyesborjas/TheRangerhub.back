@@ -65,6 +65,9 @@ def about():
 
 # Updated Routes for user profile
 
+# Rutas para el manejo del perfil de usuario (SIN usar biography_extend)
+
+# Ruta para obtener el perfil de un usuario específico o el usuario actual
 @app.route('/api/user-profile/<string:username>', methods=['GET'])
 def get_user_profile(username):
     connection = get_db_connection()
@@ -74,7 +77,7 @@ def get_user_profile(username):
     try:
         cursor = connection.cursor(cursor_factory=RealDictCursor)
         
-        # Handle "current" user based on session token
+        # Manejar el caso del usuario actual basado en la sesión
         if username == "current":
             # Obtener el username del usuario actual desde la sesión
             from flask import session
@@ -82,15 +85,16 @@ def get_user_profile(username):
                 return jsonify({"error": "Authentication required"}), 401
             username = session.get('username')
         
-        # Obtener datos del usuario - Optimized query for needed fields
+        # Consulta optimizada para obtener solo los campos necesarios
         cursor.execute("""
             SELECT 
                 username,
                 first_name,
                 last_name,
                 email,
-                country, 
-                biography_extend
+                country,
+                state_province AS region,
+                profile_picture_url
             FROM users 
             WHERE username = %s
         """, (username,))
@@ -100,16 +104,6 @@ def get_user_profile(username):
         if not user:
             return jsonify({"error": "Usuario no encontrado"}), 404
         
-        # Extraer datos adicionales del JSON biography_extend si existe
-        region = None
-        postcode = None
-        
-        if user['biography_extend']:
-            bio_extend = user['biography_extend']
-            if isinstance(bio_extend, dict):
-                region = bio_extend.get('region')
-                postcode = bio_extend.get('postcode')
-        
         # Formatear respuesta con solo los campos necesarios
         formatted_user = {
             "username": user['username'],
@@ -118,8 +112,9 @@ def get_user_profile(username):
             "displayName": f"{user['first_name']} {user['last_name']}",
             "email": user['email'],
             "country": user['country'] or "Chile",
-            "region": region or "Santiago",
-            "postcode": postcode or ""
+            "region": user['region'] or "Santiago",
+            "postcode": "",  # Valor por defecto ya que no usaremos biography_extend
+            "profilePicture": user['profile_picture_url']
         }
         
         return jsonify(formatted_user), 200
@@ -133,7 +128,203 @@ def get_user_profile(username):
         if 'cursor' in locals(): cursor.close()
         if connection: connection.close()
 
+# Ruta para actualizar el perfil de un usuario
+@app.route('/api/user-profile/<string:username>', methods=['PUT'])
+def update_user_profile(username):
+    connection = get_db_connection()
+    if not connection:
+        return jsonify({"error": "Database connection failed"}), 500
 
+    try:
+        # Obtener datos del request
+        data = request.json
+        if not data:
+            return jsonify({"error": "No se proporcionaron datos"}), 400
+        
+        cursor = connection.cursor(cursor_factory=RealDictCursor)
+        
+        # Manejar el caso del usuario actual basado en la sesión
+        if username == "current":
+            # Obtener el username del usuario actual desde la sesión
+            from flask import session
+            if 'username' not in session:
+                return jsonify({"error": "Authentication required"}), 401
+            username = session.get('username')
+        
+        # Verificar que el usuario existe
+        cursor.execute("SELECT username FROM users WHERE username = %s", (username,))
+        user = cursor.fetchone()
+        
+        if not user:
+            return jsonify({"error": "Usuario no encontrado"}), 404
+        
+        # Preparar campos para actualizar
+        update_fields = []
+        update_values = []
+        
+        # Verificar y añadir los campos a actualizar
+        if 'displayName' in data:
+            # Dividir el displayName en first_name y last_name
+            names = data['displayName'].split(' ', 1)
+            first_name = names[0]
+            last_name = names[1] if len(names) > 1 else ""
+            
+            update_fields.append("first_name = %s")
+            update_values.append(first_name)
+            
+            update_fields.append("last_name = %s")
+            update_values.append(last_name)
+        
+        if 'email' in data:
+            update_fields.append("email = %s")
+            update_values.append(data['email'])
+        
+        # País se guarda en el campo country directamente
+        if 'country' in data:
+            update_fields.append("country = %s")
+            update_values.append(data['country'])
+        
+        # Región/estado se guarda en state_province
+        if 'region' in data:
+            update_fields.append("state_province = %s")
+            update_values.append(data['region'])
+        
+        # Nota: Ignoramos 'postcode' ya que no usaremos biography_extend
+        
+        # Añadir username al final de los valores para la cláusula WHERE
+        update_values.append(username)
+        
+        # Construir y ejecutar la consulta solo si hay campos a actualizar
+        if update_fields:
+            query = f"UPDATE users SET {', '.join(update_fields)} WHERE username = %s RETURNING username"
+            cursor.execute(query, update_values)
+            connection.commit()
+            
+            # Imprimir información de depuración
+            print(f"Usuario actualizado: {username}")
+            print(f"Campos actualizados: {update_fields}")
+            
+            return jsonify({"message": "Perfil actualizado correctamente"}), 200
+        else:
+            return jsonify({"message": "No hay cambios para aplicar"}), 200
+
+    except Exception as e:
+        if connection:
+            connection.rollback()
+        import traceback
+        error_details = traceback.format_exc()
+        print(f"Error en update_user_profile: {str(e)}\n{error_details}")
+        return jsonify({"error": "Error interno al actualizar perfil de usuario", "details": str(e)}), 500
+    finally:
+        if 'cursor' in locals(): cursor.close()
+        if connection: connection.close()
+
+# Nueva ruta para verificar la disponibilidad del email
+@app.route('/api/check-email-availability', methods=['POST'])
+def check_email_availability():
+    connection = get_db_connection()
+    if not connection:
+        return jsonify({"error": "Database connection failed"}), 500
+    
+    try:
+        data = request.json
+        if not data or 'email' not in data:
+            return jsonify({"error": "Email no proporcionado"}), 400
+            
+        email = data['email']
+        current_username = data.get('currentUsername')  # Para excluir al usuario actual
+        
+        cursor = connection.cursor()
+        
+        # Si tenemos un username actual, excluirlo de la búsqueda
+        if current_username:
+            cursor.execute("SELECT COUNT(*) FROM users WHERE email = %s AND username != %s", (email, current_username))
+        else:
+            cursor.execute("SELECT COUNT(*) FROM users WHERE email = %s", (email,))
+            
+        count = cursor.fetchone()[0]
+        
+        return jsonify({
+            "available": count == 0,
+            "message": "Email disponible" if count == 0 else "Este email ya está registrado"
+        }), 200
+        
+    except Exception as e:
+        import traceback
+        error_details = traceback.format_exc()
+        print(f"Error en check_email_availability: {str(e)}\n{error_details}")
+        return jsonify({"error": "Error al verificar disponibilidad del email", "details": str(e)}), 500
+    finally:
+        if 'cursor' in locals(): cursor.close()
+        if connection: connection.close()
+
+# Nueva ruta para subir foto de perfil
+@app.route('/api/upload-profile-picture', methods=['POST'])
+def upload_profile_picture():
+    connection = get_db_connection()
+    if not connection:
+        return jsonify({"error": "Database connection failed"}), 500
+    
+    try:
+        # Verificar si hay un archivo en la solicitud
+        if 'file' not in request.files:
+            return jsonify({"error": "No se envió ningún archivo"}), 400
+            
+        file = request.files['file']
+        
+        # Si el usuario no seleccionó un archivo
+        if file.filename == '':
+            return jsonify({"error": "No se seleccionó ningún archivo"}), 400
+            
+        # Obtener el username del usuario actual
+        from flask import session
+        if 'username' not in session:
+            return jsonify({"error": "Authentication required"}), 401
+            
+        username = session.get('username')
+        
+        # Verificar extensiones permitidas
+        allowed_extensions = {'png', 'jpg', 'jpeg', 'gif'}
+        if '.' not in file.filename or file.filename.rsplit('.', 1)[1].lower() not in allowed_extensions:
+            return jsonify({"error": "Formato de archivo no permitido"}), 400
+            
+        # Generar nombre único para el archivo
+        import uuid
+        import os
+        filename = f"{uuid.uuid4()}.{file.filename.rsplit('.', 1)[1].lower()}"
+        
+        # Ruta donde se guardarán las imágenes (ajustar según tu configuración)
+        upload_folder = os.path.join('static', 'uploads', 'profile_pictures')
+        os.makedirs(upload_folder, exist_ok=True)
+        
+        # Guardar el archivo
+        file_path = os.path.join(upload_folder, filename)
+        file.save(file_path)
+        
+        # URL pública de la imagen
+        public_url = f"/static/uploads/profile_pictures/{filename}"
+        
+        # Actualizar la base de datos con la nueva URL
+        cursor = connection.cursor()
+        cursor.execute("UPDATE users SET profile_picture_url = %s WHERE username = %s", (public_url, username))
+        connection.commit()
+        
+        return jsonify({
+            "message": "Imagen de perfil actualizada correctamente",
+            "profilePictureUrl": public_url
+        }), 200
+        
+    except Exception as e:
+        if connection:
+            connection.rollback()
+        import traceback
+        error_details = traceback.format_exc()
+        print(f"Error en upload_profile_picture: {str(e)}\n{error_details}")
+        return jsonify({"error": "Error al subir la imagen de perfil", "details": str(e)}), 500
+    finally:
+        if 'cursor' in locals(): cursor.close()
+        if connection: connection.close()
+        
 @app.route('/api/user-profile/<string:username>', methods=['PUT'])
 def update_user_profile(username):
     connection = get_db_connection()
