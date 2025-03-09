@@ -235,6 +235,8 @@ def upload_profile_picture():
         if 'cursor' in locals(): cursor.close()
         if connection: connection.close()
         
+    
+
 @app.route('/api/user-profile/<string:username>', methods=['PUT'])
 def update_user_profile(username):
     connection = get_db_connection()
@@ -249,8 +251,16 @@ def update_user_profile(username):
         
         cursor = connection.cursor(cursor_factory=RealDictCursor)
         
-        # Verificar que el usuario existe y obtener sus datos actuales
-        cursor.execute("SELECT id, biography_extend FROM users WHERE username = %s", (username,))
+        # Manejar el caso del usuario actual basado en la sesión
+        if username == "current":
+            # Obtener el username del usuario actual desde la sesión
+            from flask import session
+            if 'username' not in session:
+                return jsonify({"error": "Authentication required"}), 401
+            username = session.get('username')
+        
+        # Verificar que el usuario existe
+        cursor.execute("SELECT username FROM users WHERE username = %s", (username,))
         user = cursor.fetchone()
         
         if not user:
@@ -277,51 +287,30 @@ def update_user_profile(username):
             update_fields.append("email = %s")
             update_values.append(data['email'])
         
-        # País se guarda en nationality
+        # País se guarda en el campo country directamente
         if 'country' in data:
-            update_fields.append("nationality = %s")
+            update_fields.append("country = %s")
             update_values.append(data['country'])
         
-        # Preparar datos para biography_extend (JSONB)
-        bio_extend = user['biography_extend'] or {}
-        
-        # Asegurarnos de que bio_extend sea un diccionario
-        if isinstance(bio_extend, str):
-            import json
-            bio_extend = json.loads(bio_extend)
-        elif bio_extend is None:
-            bio_extend = {}
-        
-        # Añadir región y código postal a biography_extend
-        changed = False
+        # Región se guarda en el campo region_state
         if 'region' in data:
-            bio_extend['region'] = data['region']
-            changed = True
+            update_fields.append("region_state = %s")
+            update_values.append(data['region'])
         
-        if 'postcode' in data:
-            bio_extend['postcode'] = data['postcode']
-            changed = True
-        
-        # Actualizar biography_extend solo si cambió
-        if changed:
-            update_fields.append("biography_extend = %s")
-            from psycopg2.extras import Json
-            update_values.append(Json(bio_extend))
+        # Nota: Omitimos 'postcode' ya que no estamos usando biography_extend
         
         # Añadir username al final de los valores para la cláusula WHERE
         update_values.append(username)
         
         # Construir y ejecutar la consulta solo si hay campos a actualizar
         if update_fields:
-            query = f"UPDATE users SET {', '.join(update_fields)} WHERE username = %s RETURNING id"
+            query = f"UPDATE users SET {', '.join(update_fields)} WHERE username = %s RETURNING username"
             cursor.execute(query, update_values)
             connection.commit()
             
             # Imprimir información de depuración
             print(f"Usuario actualizado: {username}")
             print(f"Campos actualizados: {update_fields}")
-            print(f"Valores nuevos: {update_values[:-1]}")  # Excluir el username del final
-            print(f"biography_extend actualizado: {bio_extend}")
             
             return jsonify({"message": "Perfil actualizado correctamente"}), 200
         else:
