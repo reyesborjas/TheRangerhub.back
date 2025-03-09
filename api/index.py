@@ -120,16 +120,16 @@ def get_user_profile(username):
                         postcode = bio_extend.get('postcode', "")
                         if 'languages' in bio_extend and isinstance(bio_extend['languages'], list):
                             bio_languages = bio_extend['languages']
-                        if 'specialities' in bio_extend and isinstance(bio_extend['specialities'], list):
-                            specialities = bio_extend['specialities']
+                        if 'specialties' in bio_extend and isinstance(bio_extend['specialties'], list):
+                            specialties = bio_extend['specialties']
                 except Exception as e:
                     print("Error al parsear biography_extend:", e)
             elif isinstance(bio_extend, dict):
                 postcode = bio_extend.get('postcode', "")
                 if 'languages' in bio_extend and isinstance(bio_extend['languages'], list):
                     bio_languages = bio_extend['languages']
-                if 'specialities' in bio_extend and isinstance(bio_extend['specialities'], list):
-                    specialities = bio_extend['specialities']
+                if 'specialties' in bio_extend and isinstance(bio_extend['specialties'], list):
+                    specialties = bio_extend['specialties']
         
         # Obtener idiomas del campo languages (lista de strings) o del array en biography_extend
         languages = user['languages'] if user['languages'] else bio_languages
@@ -153,7 +153,7 @@ def get_user_profile(username):
             "postcode": postcode,
             "profilePicture": user['profile_picture_url'],
             "languages": languages,
-            "specialities": specialities
+            "specialties": specialties
         }
         print("Respuesta formateada:", formatted_user)
         return jsonify(formatted_user), 200
@@ -445,8 +445,8 @@ def update_user_profile(username):
             update_biography_extend = True
         
         # Añadir/actualizar las especialidades en biography_extend
-        if 'specialities' in data and isinstance(data['specialities'], list):
-            bio_extend['specialities'] = data['specialities']
+        if 'specialties' in data and isinstance(data['specialties'], list):
+            bio_extend['specialties'] = data['specialties']
             update_biography_extend = True
         
         # Añadir a los campos a actualizar si hubo cambios en biography_extend
