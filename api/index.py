@@ -237,6 +237,8 @@ def upload_profile_picture():
         
     
 
+# Ruta final corregida para actualizar el perfil de usuario
+
 @app.route('/api/user-profile/<string:username>', methods=['PUT'])
 def update_user_profile(username):
     connection = get_db_connection()
@@ -259,8 +261,8 @@ def update_user_profile(username):
                 return jsonify({"error": "Authentication required"}), 401
             username = session.get('username')
         
-        # Verificar que el usuario existe
-        cursor.execute("SELECT username FROM users WHERE username = %s", (username,))
+        # Verificar que el usuario existe y obtener sus datos actuales
+        cursor.execute("SELECT username, biography_extend FROM users WHERE username = %s", (username,))
         user = cursor.fetchone()
         
         if not user:
@@ -287,17 +289,38 @@ def update_user_profile(username):
             update_fields.append("email = %s")
             update_values.append(data['email'])
         
-        # País se guarda en el campo country directamente
+        # Actualizar país solo en country, no en nationality
         if 'country' in data:
             update_fields.append("country = %s")
             update_values.append(data['country'])
         
-        # Región se guarda en el campo region_state
+        # Actualizar región en region_state
         if 'region' in data:
             update_fields.append("region_state = %s")
             update_values.append(data['region'])
         
-        # Nota: Omitimos 'postcode' ya que no estamos usando biography_extend
+        # Preparar datos para biography_extend (para código postal)
+        if 'postcode' in data and data['postcode']:
+            bio_extend = {}
+            
+            # Si ya existe biography_extend, cargarlo
+            if user['biography_extend']:
+                if isinstance(user['biography_extend'], str):
+                    import json
+                    try:
+                        bio_extend = json.loads(user['biography_extend'])
+                    except:
+                        bio_extend = {}
+                elif isinstance(user['biography_extend'], dict):
+                    bio_extend = user['biography_extend']
+            
+            # Añadir/actualizar el código postal
+            bio_extend['postcode'] = data['postcode']
+            
+            # Añadir a los campos a actualizar
+            update_fields.append("biography_extend = %s")
+            from psycopg2.extras import Json
+            update_values.append(Json(bio_extend))
         
         # Añadir username al final de los valores para la cláusula WHERE
         update_values.append(username)
@@ -326,7 +349,7 @@ def update_user_profile(username):
     finally:
         if 'cursor' in locals(): cursor.close()
         if connection: connection.close()
-        
+              
 @app.route('/api/certifications', methods=['GET'])
 def get_certifications():
     connection = get_db_connection()
