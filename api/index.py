@@ -110,55 +110,46 @@ def get_user_profile(username):
         specialities = []
         
         if user['biography_extend']:
-            bio_extend = user['biography_extend']
-            # Manejar tanto string como diccionario
-            if isinstance(bio_extend, str):
-                import json
-                try:
-                    bio_extend = json.loads(bio_extend)
-                    if isinstance(bio_extend, dict):
-                        postcode = bio_extend.get('postcode', "")
-                        if 'languages' in bio_extend and isinstance(bio_extend['languages'], list):
-                            bio_languages = bio_extend['languages']
-                        if 'specialities' in bio_extend and isinstance(bio_extend['specialities'], list):
-                            specialities = bio_extend['specialities']
-                except Exception as e:
-                    print("Error al parsear biography_extend:", e)
-            elif isinstance(bio_extend, dict):
+    bio_extend = user['biography_extend']
+    print("Contenido de biography_extend:", bio_extend)
+    # Manejar tanto string como diccionario
+    if isinstance(bio_extend, str):
+        import json
+        try:
+            bio_extend = json.loads(bio_extend)
+            if isinstance(bio_extend, dict):
                 postcode = bio_extend.get('postcode', "")
                 if 'languages' in bio_extend and isinstance(bio_extend['languages'], list):
                     bio_languages = bio_extend['languages']
-                if 'specialities' in bio_extend and isinstance(bio_extend['specialities'], list):
-                    specialities = bio_extend['specialities']
-        
-        # Obtener idiomas del campo languages (lista de strings) o del array en biography_extend
-        languages = user['languages'] if user['languages'] else bio_languages
-        
-        # Si languages es un string de PostgreSQL con formato de array, convertirlo a lista Python
-        if isinstance(languages, str) and languages.startswith('{') and languages.endswith('}'):
-            languages = languages.strip('{}').split(',')
-            # Limpiar posibles comillas
-            languages = [lang.strip('"\'') for lang in languages if lang.strip()]
-        
-        # Formatear respuesta correctamente
-        formatted_user = {
-            "username": user['username'],
-            "firstName": user['first_name'],
-            "lastName": user['last_name'],
-            "displayName": f"{user['first_name']} {user['last_name']}",
-            "email": user['email'],
-            "nationality": user['nationality'] or "",
-            "country": user['country'] or "",
-            "region": user['region_state'] or "",
-            "postcode": postcode,
-            "profilePicture": user['profile_picture_url'],
-            "languages": languages,
-            "specialities": specialities
-        }
-        print("Respuesta formateada:", formatted_user)
-        return jsonify(formatted_user), 200
+                if 'specialties' in bio_extend and isinstance(bio_extend['specialties'], list):  # Asegúrate de usar 'specialties'
+                    specialities = bio_extend['specialties']
+        except Exception as e:
+            print("Error al parsear biography_extend:", e)
+    elif isinstance(bio_extend, dict):
+        postcode = bio_extend.get('postcode', "")
+        if 'languages' in bio_extend and isinstance(bio_extend['languages'], list):
+            bio_languages = bio_extend['languages']
+        if 'specialties' in bio_extend and isinstance(bio_extend['specialties'], list):  # Asegúrate de usar 'specialties'
+            specialities = bio_extend['specialties']
 
-    except Exception as e:
+# Asegúrate de que las especialidades se estén incluyendo en la respuesta
+formatted_user = {
+    "username": user['username'],
+    "firstName": user['first_name'],
+    "lastName": user['last_name'],
+    "displayName": f"{user['first_name']} {user['last_name']}",
+    "email": user['email'],
+    "nationality": user['nationality'] or "",
+    "country": user['country'] or "",
+    "region": user['region_state'] or "",
+    "postcode": postcode,
+    "profilePicture": user['profile_picture_url'],
+    "languages": languages,
+    "specialities": specialities  # Asegúrate de que esto esté presente
+}
+print("Respuesta formateada:", formatted_user)
+return jsonify(formatted_user), 200
+   except Exception as e:
         import traceback
         error_details = traceback.format_exc()
         print(f"Error en get_user_profile: {str(e)}\n{error_details}")
