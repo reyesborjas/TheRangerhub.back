@@ -93,7 +93,7 @@ def update_user_profile(username):
             update_fields.append("email = %s")
             update_values.append(data['email'])
         
-        # País se guarda en nationality
+    
         if 'country' in data:
             update_fields.append("country = %s")
             update_values.append(data['country'])
@@ -235,35 +235,35 @@ def get_user_profile(username):
         
         # Formatear respuesta
         formatted_user = {
-            "id": str(user['id']),
-            "username": user['username'],
-            "displayName": f"{user['first_name'] or ''} {user['last_name'] or ''}".strip(),
-            "firstName": user['first_name'],
-            "lastName": user['last_name'],
-            "email": user['email'],
-            "country": user['country'] or "",
-            "nationality": user['nationality'] or "",
-            "region": region or "",
-            "postcode": postcode or "",
-            "biography": user['biography'],
-            "profilePicture": user['profile_picture_url'],
-            "phoneNumber": user['phone_number'],
-            "biography_extend": {
-                "region": region,
-                "title": title,
-                "languages": languages,
-                "specialties": specialties
-            },
-            "identification": {
-                "rut": user['rut'],
-                "passportNumber": user['passport_number']
-            },
-            "title": title,  # Añadido para acceso directo
-            "languages": languages,  # Añadido para acceso directo
-            "specialties": specialties  # Añadido para acceso directo
-        }
-        
-        return jsonify(formatted_user), 200
+    "id": str(user.get('id', '')),
+    "username": user.get('username', ''),
+    "displayName": f"{user.get('first_name', '')} {user.get('last_name', '')}".strip(),
+    "firstName": user.get('first_name', ''),
+    "lastName": user.get('last_name', ''),
+    "email": user.get('email', ''),
+    "country": user.get('country', ''),
+    "nationality": user.get('nationality', ''),
+    "region": region or "",
+    "postcode": postcode or "",
+    "biography": user.get('biography', ''),
+    "profilePicture": user.get('profile_picture_url', ''),
+    "phoneNumber": user.get('phone_number', ''),
+    "biography_extend": {
+        "region": region,
+        "title": title,
+        "languages": languages,
+        "specialties": specialties
+    },
+    "identification": {
+        "rut": user.get('rut', ''),
+        "passportNumber": user.get('passport_number', '')
+    },
+    "title": title,
+    "languages": languages,
+    "specialties": specialties
+}
+
+return jsonify(formatted_user), 200
 
     except Exception as e:
         import traceback
