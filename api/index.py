@@ -98,6 +98,10 @@ def update_user_profile(username):
             update_fields.append("nationality = %s")
             update_values.append(data['country'])
         
+        if 'profile_picture_url' in data:
+            update_fields.append("profile_picture_url = %s")
+            update_values.append(data['profile_picture_url'])
+        
         # Preparar datos para biography_extend (JSONB)
         bio_extend = user['biography_extend'] or {}
         
