@@ -63,7 +63,118 @@ def home():
 def about():
     return 'About'
 
-# Ruta GET actualizada para especialidades
+@app.route('/api/user-profile/<string:username>', methods=['PUT'])
+def update_user_profile(username):
+    connection = get_db_connection()
+    if not connection:
+        return jsonify({"error": "Database connection failed"}), 500
+
+    try:
+        # Obtener datos del request
+        data = request.json
+        if not data:
+            return jsonify({"error": "No se proporcionaron datos"}), 400
+        
+        cursor = connection.cursor(cursor_factory=RealDictCursor)
+        
+        # Verificar que el usuario existe y obtener sus datos actuales
+        cursor.execute("SELECT id, biography_extend FROM users WHERE username = %s", (username,))
+        user = cursor.fetchone()
+        
+        if not user:
+            return jsonify({"error": "Usuario no encontrado"}), 404
+        
+        # Preparar campos para actualizar
+        update_fields = []
+        update_values = []
+        
+        # Verificar y añadir los campos a actualizar
+        if 'email' in data:
+            update_fields.append("email = %s")
+            update_values.append(data['email'])
+        
+        # País se guarda en nationality
+        if 'country' in data:
+            update_fields.append("nationality = %s")
+            update_values.append(data['country'])
+        
+        # Preparar datos para biography_extend (JSONB)
+        bio_extend = user['biography_extend'] or {}
+        
+        # Asegurarnos de que bio_extend sea un diccionario
+        if isinstance(bio_extend, str):
+            import json
+            bio_extend = json.loads(bio_extend)
+        elif bio_extend is None:
+            bio_extend = {}
+        
+        # Verificar si hay cambios en biography_extend
+        changed = False
+        
+        # Añadir región al biography_extend
+        if 'region' in data:
+            bio_extend['region'] = data['region']
+            changed = True
+        
+        # Añadir código postal al biography_extend si está presente
+        if 'postcode' in data:
+            bio_extend['postcode'] = data['postcode']
+            changed = True
+        
+        # Añadir título profesional al biography_extend si está presente
+        if 'biography_extend' in data and 'title' in data['biography_extend']:
+            bio_extend['title'] = data['biography_extend']['title']
+            changed = True
+        
+        # Añadir idiomas al biography_extend si están presentes
+        if 'biography_extend' in data and 'languages' in data['biography_extend']:
+            bio_extend['languages'] = data['biography_extend']['languages']
+            changed = True
+
+        # Añadir especialidades al biography_extend si están presentes
+        if 'specialties' in data:
+            bio_extend['specialties'] = data['specialties']
+            changed = True
+        elif 'biography_extend' in data and 'specialties' in data['biography_extend']:
+            bio_extend['specialties'] = data['biography_extend']['specialties']
+            changed = True
+        
+        # Actualizar biography_extend solo si cambió
+        if changed:
+            update_fields.append("biography_extend = %s")
+            from psycopg2.extras import Json
+            update_values.append(Json(bio_extend))
+        
+        # Añadir username al final de los valores para la cláusula WHERE
+        update_values.append(username)
+        
+        # Construir y ejecutar la consulta solo si hay campos a actualizar
+        if update_fields:
+            query = f"UPDATE users SET {', '.join(update_fields)} WHERE username = %s RETURNING id"
+            cursor.execute(query, update_values)
+            connection.commit()
+            
+            # Imprimir información de depuración
+            print(f"Usuario actualizado: {username}")
+            print(f"Campos actualizados: {update_fields}")
+            print(f"Valores nuevos: {update_values[:-1]}")  # Excluir el username del final
+            print(f"biography_extend actualizado: {bio_extend}")
+            
+            return jsonify({"message": "Perfil actualizado correctamente"}), 200
+        else:
+            return jsonify({"message": "No hay cambios para aplicar"}), 200
+
+    except Exception as e:
+        if connection:
+            connection.rollback()
+        import traceback
+        error_details = traceback.format_exc()
+        print(f"Error en update_user_profile: {str(e)}\n{error_details}")
+        return jsonify({"error": "Error interno al actualizar perfil de usuario", "details": str(e)}), 500
+    finally:
+        if 'cursor' in locals(): cursor.close()
+        if connection: connection.close()
+
 
 @app.route('/api/user-profile/<string:username>', methods=['GET'])
 def get_user_profile(username):
@@ -74,27 +185,21 @@ def get_user_profile(username):
     try:
         cursor = connection.cursor(cursor_factory=RealDictCursor)
         
-        # Manejar el caso del usuario actual basado en la sesión
-        if username == "current":
-            # Obtener el username del usuario actual desde la sesión
-            from flask import session
-            if 'username' not in session:
-                return jsonify({"error": "Authentication required"}), 401
-            username = session.get('username')
-        
-        # Consulta optimizada para obtener todos los campos necesarios
+        # Obtener datos del usuario
         cursor.execute("""
             SELECT 
+                id,
                 username,
                 first_name,
                 last_name,
                 email,
-                nationality,
-                country,
-                region_state,
+                nationality as country,
+                rut,
+                passport_number,
+                biography,
                 profile_picture_url,
-                biography_extend,
-                languages
+                phone_number,
+                biography_extend
             FROM users 
             WHERE username = %s
         """, (username,))
@@ -104,58 +209,54 @@ def get_user_profile(username):
         if not user:
             return jsonify({"error": "Usuario no encontrado"}), 404
         
-        # Extraer datos del JSON biography_extend si existe
-        postcode = ""
-        bio_languages = []
+        # Extraer datos adicionales del JSON biography_extend si existe
+        region = None
+        postcode = None
+        title = None
+        languages = []
         specialties = []
         
         if user['biography_extend']:
             bio_extend = user['biography_extend']
-            # Manejar tanto string como diccionario
             if isinstance(bio_extend, str):
                 import json
-                try:
-                    bio_extend = json.loads(bio_extend)
-                    if isinstance(bio_extend, dict):
-                        postcode = bio_extend.get('postcode', "")
-                        if 'languages' in bio_extend and isinstance(bio_extend['languages'], list):
-                            bio_languages = bio_extend['languages']
-                        if 'specialties' in bio_extend and isinstance(bio_extend['specialties'], list):
-                            specialties = bio_extend['specialties']
-                except Exception as e:
-                    print("Error al parsear biography_extend:", e)
-            elif isinstance(bio_extend, dict):
-                postcode = bio_extend.get('postcode', "")
-                if 'languages' in bio_extend and isinstance(bio_extend['languages'], list):
-                    bio_languages = bio_extend['languages']
-                if 'specialties' in bio_extend and isinstance(bio_extend['specialties'], list):
-                    specialties = bio_extend['specialties']
+                bio_extend = json.loads(bio_extend)
+            
+            region = bio_extend.get('region')
+            postcode = bio_extend.get('postcode')
+            title = bio_extend.get('title')
+            languages = bio_extend.get('languages', [])
+            specialties = bio_extend.get('specialties', [])
         
-        # Obtener idiomas del campo languages (lista de strings) o del array en biography_extend
-        languages = user['languages'] if user['languages'] else bio_languages
-        
-        # Si languages es un string de PostgreSQL con formato de array, convertirlo a lista Python
-        if isinstance(languages, str) and languages.startswith('{') and languages.endswith('}'):
-            languages = languages.strip('{}').split(',')
-            # Limpiar posibles comillas
-            languages = [lang.strip('"\'') for lang in languages if lang.strip()]
-        
-        # Formatear respuesta correctamente
+        # Formatear respuesta
         formatted_user = {
+            "id": str(user['id']),
             "username": user['username'],
+            "displayName": f"{user['first_name'] or ''} {user['last_name'] or ''}".strip(),
             "firstName": user['first_name'],
             "lastName": user['last_name'],
-            "displayName": f"{user['first_name']} {user['last_name']}",
             "email": user['email'],
-            "nationality": user['nationality'] or "",
-            "country": user['country'] or "",
-            "region": user['region_state'] or "",
-            "postcode": postcode,
+            "country": user['country'] or "Chile",
+            "region": region or "Santiago",
+            "postcode": postcode or "",
+            "biography": user['biography'],
             "profilePicture": user['profile_picture_url'],
-            "languages": languages,
-            "specialties": specialties
+            "phoneNumber": user['phone_number'],
+            "biography_extend": {
+                "region": region,
+                "title": title,
+                "languages": languages,
+                "specialties": specialties
+            },
+            "identification": {
+                "rut": user['rut'],
+                "passportNumber": user['passport_number']
+            },
+            "title": title,  # Añadido para acceso directo
+            "languages": languages,  # Añadido para acceso directo
+            "specialties": specialties  # Añadido para acceso directo
         }
-        print("Respuesta formateada:", formatted_user)
+        
         return jsonify(formatted_user), 200
 
     except Exception as e:
@@ -167,7 +268,6 @@ def get_user_profile(username):
         if 'cursor' in locals(): cursor.close()
         if connection: connection.close()
         
-# Nueva ruta para verificar la disponibilidad del email
 @app.route('/api/check-email-availability', methods=['POST'])
 def check_email_availability():
     connection = get_db_connection()
@@ -345,144 +445,7 @@ def register():
         cursor.close()
         connection.close()
 
-# Ruta PUT actualizada para especialidades
-
-@app.route('/api/user-profile/<string:username>', methods=['PUT'])
-def update_user_profile(username):
-    connection = get_db_connection()
-    if not connection:
-        return jsonify({"error": "Database connection failed"}), 500
-
-    try:
-        # Obtener datos del request
-        data = request.json
-        if not data:
-            return jsonify({"error": "No se proporcionaron datos"}), 400
-        
-        cursor = connection.cursor(cursor_factory=RealDictCursor)
-        
-        # Manejar el caso del usuario actual basado en la sesión
-        if username == "current":
-            # Obtener el username del usuario actual desde la sesión
-            from flask import session
-            if 'username' not in session:
-                return jsonify({"error": "Authentication required"}), 401
-            username = session.get('username')
-        
-        # Verificar que el usuario existe y obtener sus datos actuales
-        cursor.execute("SELECT username, biography_extend FROM users WHERE username = %s", (username,))
-        user = cursor.fetchone()
-        
-        if not user:
-            return jsonify({"error": "Usuario no encontrado"}), 404
-        
-        # Preparar campos para actualizar
-        update_fields = []
-        update_values = []
-        
-        # Verificar y añadir los campos a actualizar
-        if 'displayName' in data:
-            # Dividir el displayName en first_name y last_name
-            names = data['displayName'].split(' ', 1)
-            first_name = names[0]
-            last_name = names[1] if len(names) > 1 else ""
-            
-            update_fields.append("first_name = %s")
-            update_values.append(first_name)
-            
-            update_fields.append("last_name = %s")
-            update_values.append(last_name)
-        
-        if 'email' in data:
-            update_fields.append("email = %s")
-            update_values.append(data['email'])
-        
-        # Actualizar nacionalidad si se proporciona
-        if 'nationality' in data:
-            update_fields.append("nationality = %s")
-            update_values.append(data['nationality'])
-        
-        # Actualizar país de residencia
-        if 'country' in data:
-            update_fields.append("country = %s")
-            update_values.append(data['country'])
-        
-        # Actualizar región en region_state
-        if 'region' in data:
-            update_fields.append("region_state = %s")
-            update_values.append(data['region'])
-        
-        # Actualizar idiomas si se proporcionan
-        if 'languages' in data and isinstance(data['languages'], list):
-            # Guardar los idiomas en el campo languages (array de PostgreSQL)
-            update_fields.append("languages = %s")
-            from psycopg2.extensions import AsIs
-            update_values.append(AsIs("ARRAY[" + ",".join([f"'{lang}'" for lang in data['languages']]) + "]"))
-        
-        # Preparar datos para biography_extend (para código postal, idiomas y especialidades)
-        update_biography_extend = False
-        bio_extend = {}
-        
-        # Si ya existe biography_extend, cargarlo
-        if user['biography_extend']:
-            if isinstance(user['biography_extend'], str):
-                import json
-                try:
-                    bio_extend = json.loads(user['biography_extend'])
-                except:
-                    bio_extend = {}
-            elif isinstance(user['biography_extend'], dict):
-                bio_extend = user['biography_extend']
-        
-        # Añadir/actualizar el código postal
-        if 'postcode' in data and data['postcode']:
-            bio_extend['postcode'] = data['postcode']
-            update_biography_extend = True
-        
-        # Añadir/actualizar los idiomas en biography_extend también
-        if 'languages' in data and isinstance(data['languages'], list):
-            bio_extend['languages'] = data['languages']
-            update_biography_extend = True
-        
-        # Añadir/actualizar las especialidades en biography_extend
-        if 'specialties' in data and isinstance(data['specialties'], list):
-            bio_extend['specialties'] = data['specialties']
-            update_biography_extend = True
-        
-        # Añadir a los campos a actualizar si hubo cambios en biography_extend
-        if update_biography_extend:
-            update_fields.append("biography_extend = %s")
-            from psycopg2.extras import Json
-            update_values.append(Json(bio_extend))
-        
-        # Añadir username al final de los valores para la cláusula WHERE
-        update_values.append(username)
-        
-        # Construir y ejecutar la consulta solo si hay campos a actualizar
-        if update_fields:
-            query = f"UPDATE users SET {', '.join(update_fields)} WHERE username = %s RETURNING username"
-            cursor.execute(query, update_values)
-            connection.commit()
-            
-            # Imprimir información de depuración
-            print(f"Usuario actualizado: {username}")
-            print(f"Campos actualizados: {update_fields}")
-            
-            return jsonify({"message": "Perfil actualizado correctamente"}), 200
-        else:
-            return jsonify({"message": "No hay cambios para aplicar"}), 200
-
-    except Exception as e:
-        if connection:
-            connection.rollback()
-        import traceback
-        error_details = traceback.format_exc()
-        print(f"Error en update_user_profile: {str(e)}\n{error_details}")
-        return jsonify({"error": "Error interno al actualizar perfil de usuario", "details": str(e)}), 500
-    finally:
-        if 'cursor' in locals(): cursor.close()
-        if connection: connection.close()
-
+     
 @app.route('/roles')
 def get_roles():
     """Obtiene todos los roles de usuario"""
