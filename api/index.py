@@ -107,7 +107,7 @@ def get_user_profile(username):
         # Extraer datos del JSON biography_extend si existe
         postcode = ""
         bio_languages = []
-        specialities = []
+        specialties = []
         
         if user['biography_extend']:
             bio_extend = user['biography_extend']
