@@ -270,7 +270,7 @@ def upload_profile_picture():
         
     
 
-## Ruta final corregida para actualizar el perfil de usuario
+# Ruta final corregida para actualizar el perfil de usuario
 
 @app.route('/api/user-profile/<string:username>', methods=['PUT'])
 def update_user_profile(username):
@@ -337,25 +337,40 @@ def update_user_profile(username):
             update_fields.append("region_state = %s")
             update_values.append(data['region'])
         
-        # Preparar datos para biography_extend (para código postal)
+        # Actualizar idiomas si se proporcionan
+        if 'languages' in data and isinstance(data['languages'], list):
+            # Guardar los idiomas en el campo languages (array de PostgreSQL)
+            update_fields.append("languages = %s")
+            from psycopg2.extensions import AsIs
+            update_values.append(AsIs("ARRAY[" + ",".join([f"'{lang}'" for lang in data['languages']]) + "]"))
+        
+        # Preparar datos para biography_extend (para código postal y también backup de idiomas)
+        update_biography_extend = False
+        bio_extend = {}
+        
+        # Si ya existe biography_extend, cargarlo
+        if user['biography_extend']:
+            if isinstance(user['biography_extend'], str):
+                import json
+                try:
+                    bio_extend = json.loads(user['biography_extend'])
+                except:
+                    bio_extend = {}
+            elif isinstance(user['biography_extend'], dict):
+                bio_extend = user['biography_extend']
+        
+        # Añadir/actualizar el código postal
         if 'postcode' in data and data['postcode']:
-            bio_extend = {}
-            
-            # Si ya existe biography_extend, cargarlo
-            if user['biography_extend']:
-                if isinstance(user['biography_extend'], str):
-                    import json
-                    try:
-                        bio_extend = json.loads(user['biography_extend'])
-                    except:
-                        bio_extend = {}
-                elif isinstance(user['biography_extend'], dict):
-                    bio_extend = user['biography_extend']
-            
-            # Añadir/actualizar el código postal
             bio_extend['postcode'] = data['postcode']
-            
-            # Añadir a los campos a actualizar
+            update_biography_extend = True
+        
+        # Añadir/actualizar los idiomas en biography_extend también
+        if 'languages' in data and isinstance(data['languages'], list):
+            bio_extend['languages'] = data['languages']
+            update_biography_extend = True
+        
+        # Añadir a los campos a actualizar si hubo cambios en biography_extend
+        if update_biography_extend:
             update_fields.append("biography_extend = %s")
             from psycopg2.extras import Json
             update_values.append(Json(bio_extend))
@@ -372,7 +387,6 @@ def update_user_profile(username):
             # Imprimir información de depuración
             print(f"Usuario actualizado: {username}")
             print(f"Campos actualizados: {update_fields}")
-            print(f"Valores actualizados: {update_values[:-1]}")  # Excluir el username del final
             
             return jsonify({"message": "Perfil actualizado correctamente"}), 200
         else:
@@ -388,8 +402,6 @@ def update_user_profile(username):
     finally:
         if 'cursor' in locals(): cursor.close()
         if connection: connection.close()
-
-
             
 @app.route('/api/certifications', methods=['GET'])
 def get_certifications():
