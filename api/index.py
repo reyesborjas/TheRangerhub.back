@@ -63,10 +63,6 @@ def home():
 def about():
     return 'About'
 
-# Updated Routes for user profile
-
-# Rutas para el manejo del perfil de usuario (SIN usar biography_extend)
-
 # Ruta final corregida para obtener el perfil de usuario
 
 @app.route('/api/user-profile/<string:username>', methods=['GET'])
@@ -86,17 +82,18 @@ def get_user_profile(username):
                 return jsonify({"error": "Authentication required"}), 401
             username = session.get('username')
         
-        # Consulta optimizada para obtener solo los campos necesarios
-        # Usando el nombre correcto de la columna: region_state
+        # Consulta optimizada para obtener todos los campos necesarios
         cursor.execute("""
             SELECT 
                 username,
                 first_name,
                 last_name,
                 email,
+                nationality,
                 country,
-                region_state AS region,
-                profile_picture_url
+                region_state,
+                profile_picture_url,
+                biography_extend
             FROM users 
             WHERE username = %s
         """, (username,))
@@ -106,16 +103,34 @@ def get_user_profile(username):
         if not user:
             return jsonify({"error": "Usuario no encontrado"}), 404
         
-        # Formatear respuesta con solo los campos necesarios
+        # Extraer datos del JSON biography_extend si existe
+        postcode = ""
+        
+        if user['biography_extend']:
+            bio_extend = user['biography_extend']
+            # Manejar tanto string como diccionario
+            if isinstance(bio_extend, str):
+                import json
+                try:
+                    bio_extend = json.loads(bio_extend)
+                    if isinstance(bio_extend, dict):
+                        postcode = bio_extend.get('postcode', "")
+                except:
+                    pass
+            elif isinstance(bio_extend, dict):
+                postcode = bio_extend.get('postcode', "")
+        
+        # Formatear respuesta correctamente
         formatted_user = {
             "username": user['username'],
             "firstName": user['first_name'],
             "lastName": user['last_name'],
             "displayName": f"{user['first_name']} {user['last_name']}",
             "email": user['email'],
-            "country": user['country'] or "Chile",
-            "region": user['region'] or "Santiago",
-            "postcode": "",  # Valor por defecto para el código postal
+            "nationality": user['nationality'] or "Chile",  # Usar campo correcto para nacionalidad
+            "country": user['country'] or user['nationality'] or "Chile",  # Preferir country, con fallback a nationality
+            "region": user['region_state'] or "Santiago",
+            "postcode": postcode,
             "profilePicture": user['profile_picture_url']
         }
         
@@ -129,6 +144,7 @@ def get_user_profile(username):
     finally:
         if 'cursor' in locals(): cursor.close()
         if connection: connection.close()
+
 # Nueva ruta para verificar la disponibilidad del email
 @app.route('/api/check-email-availability', methods=['POST'])
 def check_email_availability():
