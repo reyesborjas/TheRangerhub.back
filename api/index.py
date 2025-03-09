@@ -63,6 +63,8 @@ def home():
 def about():
     return 'About'
 
+# Updated Routes for user profile
+
 @app.route('/api/user-profile/<string:username>', methods=['GET'])
 def get_user_profile(username):
     connection = get_db_connection()
@@ -72,20 +74,22 @@ def get_user_profile(username):
     try:
         cursor = connection.cursor(cursor_factory=RealDictCursor)
         
-        # Obtener datos del usuario
+        # Handle "current" user based on session token
+        if username == "current":
+            # Obtener el username del usuario actual desde la sesión
+            from flask import session
+            if 'username' not in session:
+                return jsonify({"error": "Authentication required"}), 401
+            username = session.get('username')
+        
+        # Obtener datos del usuario - Optimized query for needed fields
         cursor.execute("""
             SELECT 
-                id,
                 username,
                 first_name,
                 last_name,
                 email,
-                nationality as country,
-                rut,
-                passport_number,
-                biography,
-                profile_picture_url,
-                phone_number,
+                country, 
                 biography_extend
             FROM users 
             WHERE username = %s
@@ -106,24 +110,16 @@ def get_user_profile(username):
                 region = bio_extend.get('region')
                 postcode = bio_extend.get('postcode')
         
-        # Formatear respuesta
+        # Formatear respuesta con solo los campos necesarios
         formatted_user = {
-            "id": str(user['id']),
             "username": user['username'],
-            "displayName": f"{user['first_name']} {user['last_name']}",
             "firstName": user['first_name'],
             "lastName": user['last_name'],
+            "displayName": f"{user['first_name']} {user['last_name']}",
             "email": user['email'],
             "country": user['country'] or "Chile",
             "region": region or "Santiago",
-            "postcode": postcode or "",
-            "biography": user['biography'],
-            "profilePicture": user['profile_picture_url'],
-            "phoneNumber": user['phone_number'],
-            "identification": {
-                "rut": user['rut'],
-                "passportNumber": user['passport_number']
-            }
+            "postcode": postcode or ""
         }
         
         return jsonify(formatted_user), 200
@@ -133,6 +129,116 @@ def get_user_profile(username):
         error_details = traceback.format_exc()
         print(f"Error en get_user_profile: {str(e)}\n{error_details}")
         return jsonify({"error": "Error interno al obtener perfil de usuario", "details": str(e)}), 500
+    finally:
+        if 'cursor' in locals(): cursor.close()
+        if connection: connection.close()
+
+@app.route('/api/user-profile/<string:username>', methods=['PUT'])
+def update_user_profile(username):
+    connection = get_db_connection()
+    if not connection:
+        return jsonify({"error": "Database connection failed"}), 500
+
+    try:
+        # Obtener datos del request
+        data = request.json
+        if not data:
+            return jsonify({"error": "No se proporcionaron datos"}), 400
+        
+        cursor = connection.cursor(cursor_factory=RealDictCursor)
+        
+        # Handle "current" user based on session token
+        if username == "current":
+            # Obtener el username del usuario actual desde la sesión
+            from flask import session
+            if 'username' not in session:
+                return jsonify({"error": "Authentication required"}), 401
+            username = session.get('username')
+        
+        # Verificar que el usuario existe y obtener sus datos actuales
+        cursor.execute("SELECT username, biography_extend FROM users WHERE username = %s", (username,))
+        user = cursor.fetchone()
+        
+        if not user:
+            return jsonify({"error": "Usuario no encontrado"}), 404
+        
+        # Preparar campos para actualizar
+        update_fields = []
+        update_values = []
+        
+        # Verificar y añadir los campos a actualizar
+        if 'displayName' in data:
+            # Dividir el displayName en first_name y last_name
+            names = data['displayName'].split(' ', 1)
+            first_name = names[0]
+            last_name = names[1] if len(names) > 1 else ""
+            
+            update_fields.append("first_name = %s")
+            update_values.append(first_name)
+            
+            update_fields.append("last_name = %s")
+            update_values.append(last_name)
+        
+        if 'email' in data:
+            update_fields.append("email = %s")
+            update_values.append(data['email'])
+        
+        # País se guarda en el campo country directamente
+        if 'country' in data:
+            update_fields.append("country = %s")
+            update_values.append(data['country'])
+        
+        # Preparar datos para biography_extend (JSONB)
+        bio_extend = user['biography_extend'] or {}
+        
+        # Asegurarnos de que bio_extend sea un diccionario
+        if isinstance(bio_extend, str):
+            import json
+            bio_extend = json.loads(bio_extend)
+        elif bio_extend is None:
+            bio_extend = {}
+        
+        # Añadir región y código postal a biography_extend
+        changed = False
+        if 'region' in data:
+            bio_extend['region'] = data['region']
+            changed = True
+        
+        if 'postcode' in data:
+            bio_extend['postcode'] = data['postcode']
+            changed = True
+        
+        # Actualizar biography_extend solo si cambió
+        if changed:
+            update_fields.append("biography_extend = %s")
+            from psycopg2.extras import Json
+            update_values.append(Json(bio_extend))
+        
+        # Añadir username al final de los valores para la cláusula WHERE
+        update_values.append(username)
+        
+        # Construir y ejecutar la consulta solo si hay campos a actualizar
+        if update_fields:
+            query = f"UPDATE users SET {', '.join(update_fields)} WHERE username = %s RETURNING username"
+            cursor.execute(query, update_values)
+            connection.commit()
+            
+            # Imprimir información de depuración
+            print(f"Usuario actualizado: {username}")
+            print(f"Campos actualizados: {update_fields}")
+            print(f"Valores nuevos: {update_values[:-1]}")  # Excluir el username del final
+            
+            return jsonify({"message": "Perfil actualizado correctamente"}), 200
+        else:
+            return jsonify({"message": "No hay cambios para aplicar"}), 200
+
+    except Exception as e:
+        if connection:
+            connection.rollback()
+        import traceback
+        error_details = traceback.format_exc()
+        print(f"Error en update_user_profile: {str(e)}\n{error_details}")
+        return jsonify({"error": "Error interno al actualizar perfil de usuario", "details": str(e)}), 500
     finally:
         if 'cursor' in locals(): cursor.close()
         if connection: connection.close()
@@ -239,6 +345,7 @@ def update_user_profile(username):
     finally:
         if 'cursor' in locals(): cursor.close()
         if connection: connection.close()
+        
 @app.route('/api/certifications', methods=['GET'])
 def get_certifications():
     connection = get_db_connection()

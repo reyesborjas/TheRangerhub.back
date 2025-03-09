@@ -26,8 +26,10 @@ CREATE TABLE users (
     profile_picture_url varchar(255) UNIQUE,
     profile_visibility BOOLEAN NOT NULL DEFAULT TRUE,
     phone_number varchar(25) UNIQUE,
-    biography_extend jsonb,
     calification numeric(2,1)
+    country varchar(30),
+    state_province varchar(30),
+    languages varchar ARRAY[30],
 );
 
 
