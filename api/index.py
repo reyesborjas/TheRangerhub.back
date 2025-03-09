@@ -235,35 +235,35 @@ def get_user_profile(username):
         
         # Formatear respuesta
         formatted_user = {
-    "id": str(user.get('id', '')),
-    "username": user.get('username', ''),
-    "displayName": f"{user.get('first_name', '')} {user.get('last_name', '')}".strip(),
-    "firstName": user.get('first_name', ''),
-    "lastName": user.get('last_name', ''),
-    "email": user.get('email', ''),
-    "country": user.get('country', ''),
-    "nationality": user.get('nationality', ''),
-    "region": region or "",
-    "postcode": postcode or "",
-    "biography": user.get('biography', ''),
-    "profilePicture": user.get('profile_picture_url', ''),
-    "phoneNumber": user.get('phone_number', ''),
-    "biography_extend": {
-        "region": region,
-        "title": title,
-        "languages": languages,
-        "specialties": specialties
-    },
-    "identification": {
-        "rut": user.get('rut', ''),
-        "passportNumber": user.get('passport_number', '')
-    },
-    "title": title,
-    "languages": languages,
-    "specialties": specialties
-}
+            "id": str(user.get('id', '')),  # Corregir aquí
+            "username": user.get('username', ''),
+            "displayName": f"{user.get('first_name', '')} {user.get('last_name', '')}".strip(),
+            "firstName": user.get('first_name', ''),
+            "lastName": user.get('last_name', ''),
+            "email": user.get('email', ''),
+            "country": user.get('country', ''),
+            "nationality": user.get('nationality', ''),
+            "region": region or "",
+            "postcode": postcode or "",
+            "biography": user.get('biography', ''),
+            "profilePicture": user.get('profile_picture_url', ''),
+            "phoneNumber": user.get('phone_number', ''),
+            "biography_extend": {
+                "region": region,
+                "title": title,
+                "languages": languages,
+                "specialties": specialties
+            },
+            "identification": {
+                "rut": user.get('rut', ''),
+                "passportNumber": user.get('passport_number', '')
+            },
+            "title": title,
+            "languages": languages,
+            "specialties": specialties
+        }
 
-return jsonify(formatted_user), 200
+        return jsonify(formatted_user), 200
 
     except Exception as e:
         import traceback
