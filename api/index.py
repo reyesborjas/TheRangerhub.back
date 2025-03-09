@@ -535,6 +535,73 @@ def login():
         cursor.close()
         connection.close()
 
+@app.route('/api/change-password', methods=['POST'])
+def change_password():
+    connection = get_db_connection()
+    if not connection:
+        return jsonify({"error": "Database connection failed"}), 500
+
+    try:
+        # Obtener datos del request
+        data = request.json
+        if not data:
+            return jsonify({"error": "No se proporcionaron datos"}), 400
+        
+        # Verificar que se proporcionaron todos los campos necesarios
+        required_fields = ['username', 'current_password', 'new_password']
+        for field in required_fields:
+            if field not in data:
+                return jsonify({"error": f"Campo requerido: {field}"}), 400
+        
+        username = data['username']
+        current_password = data['current_password']
+        new_password = data['new_password']
+        
+        # Validar la complejidad de la nueva contraseña
+        if len(new_password) < 8:
+            return jsonify({"error": "La nueva contraseña debe tener al menos 8 caracteres"}), 400
+        
+        # Obtener datos del usuario
+        cursor = connection.cursor(cursor_factory=RealDictCursor)
+        cursor.execute(
+            "SELECT id, password FROM users WHERE username = %s",
+            (username,)
+        )
+        
+        user = cursor.fetchone()
+        
+        if not user:
+            return jsonify({"error": "Usuario no encontrado"}), 404
+        
+        # Verificar la contraseña actual
+        hashed_current_password = hash_password(current_password)
+        if user['password'] != hashed_current_password:
+            return jsonify({"error": "La contraseña actual es incorrecta"}), 401
+        
+        # Hashear la nueva contraseña
+        hashed_new_password = hash_password(new_password)
+        
+        # Actualizar la contraseña en la base de datos
+        cursor.execute(
+            "UPDATE users SET password = %s WHERE id = %s",
+            (hashed_new_password, user['id'])
+        )
+        
+        connection.commit()
+        
+        return jsonify({"message": "Contraseña actualizada correctamente"}), 200
+
+    except Exception as e:
+        if connection:
+            connection.rollback()
+        import traceback
+        error_details = traceback.format_exc()
+        print(f"Error en change_password: {str(e)}\n{error_details}")
+        return jsonify({"error": "Error interno al cambiar la contraseña", "details": str(e)}), 500
+    finally:
+        if 'cursor' in locals(): cursor.close()
+        if connection: connection.close()
+
 @app.route('/activities', methods=['POST'])
 def create_activity():
     connection = get_db_connection()
@@ -1202,7 +1269,7 @@ def get_rangers():
                 "phone": r['phone_number'] or "No disponible",
                 "location": r['nationality'] or "Chile",
                 "isAvailable": is_available,
-                "bio": r['biography'] or "Guía profesional con experiencia en rutas de montaña y senderismo.",
+                "bio": r['biography'] or "",
                 "rating": float(r['calification']) if r['calification'] else 4.5,
                 "trips": r['trips'] or 0,
                 "specialties": specialties,
