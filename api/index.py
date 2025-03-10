@@ -3699,9 +3699,9 @@ def get_trip_califications(trip_id):
                 rc.user_id,
                 rc.calification,
                 rc.user_comment,
+                rc.created_at,
                 u.first_name || ' ' || u.last_name AS user_name,
-                u.profile_picture_url,
-                rc.created_at
+                u.profile_picture_url
             FROM ranger_califications rc
             JOIN users u ON rc.user_id = u.id
             WHERE rc.trip_id = %s
@@ -3727,7 +3727,7 @@ def get_trip_califications(trip_id):
     finally:
         if 'cursor' in locals(): cursor.close()
         if connection: connection.close()
-
+        
 @app.route('/api/califications/<string:calification_id>', methods=['PUT'])
 def update_calification(calification_id):
     """Actualiza una calificación existente"""
