@@ -16,7 +16,13 @@ from dotenv import load_dotenv
 load_dotenv()
 app = Flask(__name__)
 # Combined CORS configuration
-CORS(app)
+CORS(app, resources={
+    r"/*": {
+        "origins": ["http://localhost:5173"],  # Tu URL de frontend en desarrollo
+        "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        "allow_headers": ["Content-Type"]
+    }
+})
 
 
 # Add a specific OPTIONS handler - KEEP ONLY THIS ONE
