@@ -3144,60 +3144,8 @@ def fetch_guide_certifications(guide_id):
         if 'cursor' in locals(): cursor.close()
         if connection: connection.close()
  
- # Añadir estas rutas a tu archivo index.py
 
-@app.route('/api/trips/<string:trip_id>/califications', methods=['GET'])
-def get_trip_califications(trip_id):
-    """Obtiene todas las calificaciones de un viaje específico"""
-    connection = get_db_connection()
-    if not connection:
-        return jsonify({"error": "Database connection failed"}), 500
-
-    try:
-        cursor = connection.cursor(cursor_factory=RealDictCursor)
         
-        # Verificar que el viaje existe
-        cursor.execute("SELECT id FROM trips WHERE id = %s", (trip_id,))
-        if not cursor.fetchone():
-            return jsonify({"error": "Viaje no encontrado"}), 404
-        
-        # Obtener las calificaciones junto con información del usuario
-        cursor.execute("""
-            SELECT 
-                rc.id,
-                rc.trip_id,
-                rc.user_id,
-                rc.calification,
-                rc.user_comment,
-                u.first_name || ' ' || u.last_name AS user_name,
-                u.profile_picture_url,
-                rc.created_at
-            FROM ranger_califications rc
-            JOIN users u ON rc.user_id = u.id
-            WHERE rc.trip_id = %s
-            ORDER BY rc.created_at DESC
-        """, (trip_id,))
-        
-        califications = cursor.fetchall()
-        
-        # Formatear IDs y fechas para JSON
-        for cal in califications:
-            cal['id'] = str(cal['id'])
-            cal['trip_id'] = str(cal['trip_id'])
-            cal['user_id'] = str(cal['user_id'])
-            cal['created_at'] = cal['created_at'].isoformat() if cal['created_at'] else None
-        
-        return jsonify(califications), 200
-
-    except Exception as e:
-        import traceback
-        error_details = traceback.format_exc()
-        print(f"Error en get_trip_califications: {str(e)}\n{error_details}")
-        return jsonify({"error": "Error interno al obtener calificaciones", "details": str(e)}), 500
-    finally:
-        if 'cursor' in locals(): cursor.close()
-        if connection: connection.close()
-
 @app.route('/api/califications', methods=['POST'])
 def create_calification():
     """Crea una nueva calificación para un viaje"""
@@ -3226,6 +3174,27 @@ def create_calification():
             return jsonify({"error": "La calificación debe ser un número"}), 400
         
         cursor = connection.cursor(cursor_factory=RealDictCursor)
+        
+        # Verificar que el usuario tiene rol Explorer
+        cursor.execute("""
+            SELECT ur.role_name
+            FROM users u
+            JOIN user_roles ur ON u.role_id = ur.id
+            WHERE u.id = %s
+        """, (data['user_id'],))
+        
+        user_role = cursor.fetchone()
+        if not user_role or user_role['role_name'] != 'Explorer':
+            return jsonify({"error": "Solo los explorers pueden calificar viajes"}), 403
+        
+        # Verificar que el explorer tiene una reservación en este viaje
+        cursor.execute("""
+            SELECT id FROM reservations 
+            WHERE user_id = %s AND trip_id = %s
+        """, (data['user_id'], data['trip_id']))
+        
+        if not cursor.fetchone():
+            return jsonify({"error": "Solo puedes calificar viajes en los que has participado"}), 403
         
         # Verificar que el viaje existe
         cursor.execute("SELECT id FROM trips WHERE id = %s", (data['trip_id'],))
@@ -3286,9 +3255,8 @@ def create_calification():
     finally:
         if 'cursor' in locals(): cursor.close()
         if connection: connection.close()
+        
 
-@app.route('/api/califications/<string:calification_id>', methods=['PUT'])
-def update_calification(calification_id):
     """Actualiza una calificación existente"""
     connection = get_db_connection()
     if not connection:
@@ -3373,8 +3341,7 @@ def update_calification(calification_id):
         if 'cursor' in locals(): cursor.close()
         if connection: connection.close()
 
-@app.route('/api/califications/<string:calification_id>', methods=['DELETE'])
-def delete_calification(calification_id):
+
     """Elimina una calificación existente"""
     connection = get_db_connection()
     if not connection:
@@ -3395,6 +3362,513 @@ def delete_calification(calification_id):
         
         # Verificar permisos si se proporcionó un user_id
         if user_id and str(existing['user_id']) != user_id:
+            return jsonify({"error": "No tienes permiso para eliminar esta calificación"}), 403
+        
+        # Eliminar la calificación
+        cursor.execute("DELETE FROM ranger_califications WHERE id = %s", (calification_id,))
+        connection.commit()
+        
+        return jsonify({
+            "message": "Calificación eliminada correctamente"
+        }), 200
+        
+    except Exception as e:
+        if connection:
+            connection.rollback()
+        import traceback
+        error_details = traceback.format_exc()
+        print(f"Error en delete_calification: {str(e)}\n{error_details}")
+        return jsonify({"error": "Error interno al eliminar calificación", "details": str(e)}), 500
+    finally:
+        if 'cursor' in locals(): cursor.close()
+        if connection: connection.close()
+
+
+    """Obtiene el promedio de calificaciones de un viaje"""
+    connection = get_db_connection()
+    if not connection:
+        return jsonify({"error": "Database connection failed"}), 500
+
+    try:
+        cursor = connection.cursor(cursor_factory=RealDictCursor)
+        
+        # Verificar que el viaje existe
+        cursor.execute("SELECT id FROM trips WHERE id = %s", (trip_id,))
+        if not cursor.fetchone():
+            return jsonify({"error": "Viaje no encontrado"}), 404
+        
+        # Obtener el promedio y conteo de calificaciones
+        cursor.execute("""
+            SELECT 
+                AVG(calification) as average,
+                COUNT(id) as count
+            FROM ranger_califications
+            WHERE trip_id = %s
+        """, (trip_id,))
+        
+        result = cursor.fetchone()
+        average = float(result['average']) if result['average'] else 0
+        
+        return jsonify({
+            "trip_id": trip_id,
+            "average_rating": round(average, 1),
+            "rating_count": result['count']
+        }), 200
+        
+    except Exception as e:
+        import traceback
+        error_details = traceback.format_exc()
+        print(f"Error en get_trip_average_rating: {str(e)}\n{error_details}")
+        return jsonify({"error": "Error interno al obtener promedio de calificaciones", "details": str(e)}), 500
+    finally:
+        if 'cursor' in locals(): cursor.close()
+        if connection: connection.close()
+ 
+
+    """Obtiene todas las calificaciones de un viaje específico"""
+    connection = get_db_connection()
+    if not connection:
+        return jsonify({"error": "Database connection failed"}), 500
+
+    try:
+        cursor = connection.cursor(cursor_factory=RealDictCursor)
+        
+        # Verificar que el viaje existe
+        cursor.execute("SELECT id FROM trips WHERE id = %s", (trip_id,))
+        if not cursor.fetchone():
+            return jsonify({"error": "Viaje no encontrado"}), 404
+        
+        # Obtener las calificaciones junto con información del usuario
+        cursor.execute("""
+            SELECT 
+                rc.id,
+                rc.trip_id,
+                rc.user_id,
+                rc.calification,
+                rc.user_comment,
+                u.first_name || ' ' || u.last_name AS user_name,
+                u.profile_picture_url,
+                rc.created_at
+            FROM ranger_califications rc
+            JOIN users u ON rc.user_id = u.id
+            WHERE rc.trip_id = %s
+            ORDER BY rc.created_at DESC
+        """, (trip_id,))
+        
+        califications = cursor.fetchall()
+        
+        # Formatear IDs y fechas para JSON
+        for cal in califications:
+            cal['id'] = str(cal['id'])
+            cal['trip_id'] = str(cal['trip_id'])
+            cal['user_id'] = str(cal['user_id'])
+            cal['created_at'] = cal['created_at'].isoformat() if cal['created_at'] else None
+        
+        return jsonify(califications), 200
+
+    except Exception as e:
+        import traceback
+        error_details = traceback.format_exc()
+        print(f"Error en get_trip_califications: {str(e)}\n{error_details}")
+        return jsonify({"error": "Error interno al obtener calificaciones", "details": str(e)}), 500
+    finally:
+        if 'cursor' in locals(): cursor.close()
+        if connection: connection.close()
+
+
+    """Actualiza una calificación existente"""
+    connection = get_db_connection()
+    if not connection:
+        return jsonify({"error": "Database connection failed"}), 500
+
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"error": "No se proporcionaron datos"}), 400
+        
+        # Validar la calificación si se proporciona
+        if 'calification' in data:
+            try:
+                calification = float(data['calification'])
+                if calification < 1 or calification > 5:
+                    return jsonify({"error": "La calificación debe estar entre 1 y 5"}), 400
+            except (ValueError, TypeError):
+                return jsonify({"error": "La calificación debe ser un número"}), 400
+        
+        cursor = connection.cursor(cursor_factory=RealDictCursor)
+        
+        # Verificar que la calificación existe
+        cursor.execute("SELECT id, user_id, trip_id FROM ranger_califications WHERE id = %s", (calification_id,))
+        existing = cursor.fetchone()
+        
+        if not existing:
+            return jsonify({"error": "Calificación no encontrada"}), 404
+        
+        user_id = data.get('user_id')
+        
+        if not user_id:
+            return jsonify({"error": "Se requiere el ID de usuario para actualizar una calificación"}), 400
+        
+        # Verificar que el usuario es un Explorer
+        cursor.execute("""
+            SELECT ur.role_name
+            FROM users u
+            JOIN user_roles ur ON u.role_id = ur.id
+            WHERE u.id = %s
+        """, (user_id,))
+        
+        user_role = cursor.fetchone()
+        if not user_role or user_role['role_name'] != 'Explorer':
+            return jsonify({"error": "Solo los explorers pueden modificar calificaciones"}), 403
+        
+        # Verificar que el usuario es el propietario de la calificación
+        if str(existing['user_id']) != str(user_id):
+            return jsonify({"error": "No tienes permiso para modificar esta calificación"}), 403
+        
+        # Construir la consulta de actualización dinámicamente
+        update_fields = []
+        params = []
+        
+        if 'calification' in data:
+            update_fields.append("calification = %s")
+            params.append(data['calification'])
+            
+        if 'user_comment' in data:
+            update_fields.append("user_comment = %s")
+            params.append(data['user_comment'])
+        
+        if not update_fields:
+            return jsonify({"message": "No hay datos para actualizar"}), 400
+        
+        # Añadir el ID al final de los parámetros
+        params.append(calification_id)
+        
+        # Ejecutar la actualización
+        query = f"""
+            UPDATE ranger_califications 
+            SET {', '.join(update_fields)}
+            WHERE id = %s
+            RETURNING id, calification, user_comment, created_at
+        """
+        
+        cursor.execute(query, params)
+        updated = cursor.fetchone()
+        connection.commit()
+        
+        # Formatear para JSON
+        updated['id'] = str(updated['id'])
+        updated['created_at'] = updated['created_at'].isoformat() if updated['created_at'] else None
+        
+        return jsonify({
+            "message": "Calificación actualizada correctamente",
+            "calification": updated
+        }), 200
+        
+    except Exception as e:
+        if connection:
+            connection.rollback()
+        import traceback
+        error_details = traceback.format_exc()
+        print(f"Error en update_calification: {str(e)}\n{error_details}")
+        return jsonify({"error": "Error interno al actualizar calificación", "details": str(e)}), 500
+    finally:
+        if 'cursor' in locals(): cursor.close()
+        if connection: connection.close()
+
+
+    """Elimina una calificación existente"""
+    connection = get_db_connection()
+    if not connection:
+        return jsonify({"error": "Database connection failed"}), 500
+
+    try:
+        # Obtener parámetros de la petición
+        user_id = request.args.get('user_id')
+        
+        if not user_id:
+            return jsonify({"error": "Se requiere el ID de usuario para eliminar una calificación"}), 400
+        
+        cursor = connection.cursor(cursor_factory=RealDictCursor)
+        
+        # Verificar que la calificación existe
+        cursor.execute("SELECT id, user_id FROM ranger_califications WHERE id = %s", (calification_id,))
+        existing = cursor.fetchone()
+        
+        if not existing:
+            return jsonify({"error": "Calificación no encontrada"}), 404
+        
+        # Verificar el rol del usuario
+        cursor.execute("""
+            SELECT ur.role_name
+            FROM users u
+            JOIN user_roles ur ON u.role_id = ur.id
+            WHERE u.id = %s
+        """, (user_id,))
+        
+        user_role = cursor.fetchone()
+        if not user_role:
+            return jsonify({"error": "Usuario no encontrado"}), 404
+        
+        # Verificar permisos: solo el creador o un administrador pueden eliminar
+        is_admin = user_role['role_name'] == 'Admin'
+        is_owner = str(existing['user_id']) == str(user_id)
+        
+        if not (is_admin or is_owner):
+            return jsonify({"error": "No tienes permiso para eliminar esta calificación"}), 403
+        
+        # Eliminar la calificación
+        cursor.execute("DELETE FROM ranger_califications WHERE id = %s", (calification_id,))
+        connection.commit()
+        
+        return jsonify({
+            "message": "Calificación eliminada correctamente"
+        }), 200
+        
+    except Exception as e:
+        if connection:
+            connection.rollback()
+        import traceback
+        error_details = traceback.format_exc()
+        print(f"Error en delete_calification: {str(e)}\n{error_details}")
+        return jsonify({"error": "Error interno al eliminar calificación", "details": str(e)}), 500
+    finally:
+        if 'cursor' in locals(): cursor.close()
+        if connection: connection.close()
+
+
+    """Obtiene el promedio de calificaciones de un viaje"""
+    connection = get_db_connection()
+    if not connection:
+        return jsonify({"error": "Database connection failed"}), 500
+
+    try:
+        cursor = connection.cursor(cursor_factory=RealDictCursor)
+        
+        # Verificar que el viaje existe
+        cursor.execute("SELECT id FROM trips WHERE id = %s", (trip_id,))
+        if not cursor.fetchone():
+            return jsonify({"error": "Viaje no encontrado"}), 404
+        
+        # Obtener el promedio y conteo de calificaciones
+        cursor.execute("""
+            SELECT 
+                AVG(calification) as average,
+                COUNT(id) as count
+            FROM ranger_califications
+            WHERE trip_id = %s
+        """, (trip_id,))
+        
+        result = cursor.fetchone()
+        average = float(result['average']) if result['average'] else 0
+        
+        return jsonify({
+            "trip_id": trip_id,
+            "average_rating": round(average, 1),
+            "rating_count": result['count']
+        }), 200
+        
+    except Exception as e:
+        import traceback
+        error_details = traceback.format_exc()
+        print(f"Error en get_trip_average_rating: {str(e)}\n{error_details}")
+        return jsonify({"error": "Error interno al obtener promedio de calificaciones", "details": str(e)}), 500
+    finally:
+        if 'cursor' in locals(): cursor.close()
+        if connection: connection.close()
+
+@app.route('/api/trips/<string:trip_id>/califications', methods=['GET'])
+def get_trip_califications(trip_id):
+    """Obtiene todas las calificaciones de un viaje específico"""
+    connection = get_db_connection()
+    if not connection:
+        return jsonify({"error": "Database connection failed"}), 500
+
+    try:
+        cursor = connection.cursor(cursor_factory=RealDictCursor)
+        
+        # Verificar que el viaje existe
+        cursor.execute("SELECT id FROM trips WHERE id = %s", (trip_id,))
+        if not cursor.fetchone():
+            return jsonify({"error": "Viaje no encontrado"}), 404
+        
+        # Obtener las calificaciones junto con información del usuario
+        cursor.execute("""
+            SELECT 
+                rc.id,
+                rc.trip_id,
+                rc.user_id,
+                rc.calification,
+                rc.user_comment,
+                u.first_name || ' ' || u.last_name AS user_name,
+                u.profile_picture_url,
+                rc.created_at
+            FROM ranger_califications rc
+            JOIN users u ON rc.user_id = u.id
+            WHERE rc.trip_id = %s
+            ORDER BY rc.created_at DESC
+        """, (trip_id,))
+        
+        califications = cursor.fetchall()
+        
+        # Formatear IDs y fechas para JSON
+        for cal in califications:
+            cal['id'] = str(cal['id'])
+            cal['trip_id'] = str(cal['trip_id'])
+            cal['user_id'] = str(cal['user_id'])
+            cal['created_at'] = cal['created_at'].isoformat() if cal['created_at'] else None
+        
+        return jsonify(califications), 200
+
+    except Exception as e:
+        import traceback
+        error_details = traceback.format_exc()
+        print(f"Error en get_trip_califications: {str(e)}\n{error_details}")
+        return jsonify({"error": "Error interno al obtener calificaciones", "details": str(e)}), 500
+    finally:
+        if 'cursor' in locals(): cursor.close()
+        if connection: connection.close()
+
+@app.route('/api/califications/<string:calification_id>', methods=['PUT'])
+def update_calification(calification_id):
+    """Actualiza una calificación existente"""
+    connection = get_db_connection()
+    if not connection:
+        return jsonify({"error": "Database connection failed"}), 500
+
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"error": "No se proporcionaron datos"}), 400
+        
+        # Validar la calificación si se proporciona
+        if 'calification' in data:
+            try:
+                calification = float(data['calification'])
+                if calification < 1 or calification > 5:
+                    return jsonify({"error": "La calificación debe estar entre 1 y 5"}), 400
+            except (ValueError, TypeError):
+                return jsonify({"error": "La calificación debe ser un número"}), 400
+        
+        cursor = connection.cursor(cursor_factory=RealDictCursor)
+        
+        # Verificar que la calificación existe
+        cursor.execute("SELECT id, user_id, trip_id FROM ranger_califications WHERE id = %s", (calification_id,))
+        existing = cursor.fetchone()
+        
+        if not existing:
+            return jsonify({"error": "Calificación no encontrada"}), 404
+        
+        user_id = data.get('user_id')
+        
+        if not user_id:
+            return jsonify({"error": "Se requiere el ID de usuario para actualizar una calificación"}), 400
+        
+        # Verificar que el usuario es un Explorer
+        cursor.execute("""
+            SELECT ur.role_name
+            FROM users u
+            JOIN user_roles ur ON u.role_id = ur.id
+            WHERE u.id = %s
+        """, (user_id,))
+        
+        user_role = cursor.fetchone()
+        if not user_role or user_role['role_name'] != 'Explorer':
+            return jsonify({"error": "Solo los explorers pueden modificar calificaciones"}), 403
+        
+        # Verificar que el usuario es el propietario de la calificación
+        if str(existing['user_id']) != str(user_id):
+            return jsonify({"error": "No tienes permiso para modificar esta calificación"}), 403
+        
+        # Construir la consulta de actualización dinámicamente
+        update_fields = []
+        params = []
+        
+        if 'calification' in data:
+            update_fields.append("calification = %s")
+            params.append(data['calification'])
+            
+        if 'user_comment' in data:
+            update_fields.append("user_comment = %s")
+            params.append(data['user_comment'])
+        
+        if not update_fields:
+            return jsonify({"message": "No hay datos para actualizar"}), 400
+        
+        # Añadir el ID al final de los parámetros
+        params.append(calification_id)
+        
+        # Ejecutar la actualización
+        query = f"""
+            UPDATE ranger_califications 
+            SET {', '.join(update_fields)}
+            WHERE id = %s
+            RETURNING id, calification, user_comment, created_at
+        """
+        
+        cursor.execute(query, params)
+        updated = cursor.fetchone()
+        connection.commit()
+        
+        # Formatear para JSON
+        updated['id'] = str(updated['id'])
+        updated['created_at'] = updated['created_at'].isoformat() if updated['created_at'] else None
+        
+        return jsonify({
+            "message": "Calificación actualizada correctamente",
+            "calification": updated
+        }), 200
+        
+    except Exception as e:
+        if connection:
+            connection.rollback()
+        import traceback
+        error_details = traceback.format_exc()
+        print(f"Error en update_calification: {str(e)}\n{error_details}")
+        return jsonify({"error": "Error interno al actualizar calificación", "details": str(e)}), 500
+    finally:
+        if 'cursor' in locals(): cursor.close()
+        if connection: connection.close()
+
+@app.route('/api/califications/<string:calification_id>', methods=['DELETE'])
+def delete_calification(calification_id):
+    """Elimina una calificación existente"""
+    connection = get_db_connection()
+    if not connection:
+        return jsonify({"error": "Database connection failed"}), 500
+
+    try:
+        # Obtener parámetros de la petición
+        user_id = request.args.get('user_id')
+        
+        if not user_id:
+            return jsonify({"error": "Se requiere el ID de usuario para eliminar una calificación"}), 400
+        
+        cursor = connection.cursor(cursor_factory=RealDictCursor)
+        
+        # Verificar que la calificación existe
+        cursor.execute("SELECT id, user_id FROM ranger_califications WHERE id = %s", (calification_id,))
+        existing = cursor.fetchone()
+        
+        if not existing:
+            return jsonify({"error": "Calificación no encontrada"}), 404
+        
+        # Verificar el rol del usuario
+        cursor.execute("""
+            SELECT ur.role_name
+            FROM users u
+            JOIN user_roles ur ON u.role_id = ur.id
+            WHERE u.id = %s
+        """, (user_id,))
+        
+        user_role = cursor.fetchone()
+        if not user_role:
+            return jsonify({"error": "Usuario no encontrado"}), 404
+        
+        # Verificar permisos: solo el creador o un administrador pueden eliminar
+        is_admin = user_role['role_name'] == 'Admin'
+        is_owner = str(existing['user_id']) == str(user_id)
+        
+        if not (is_admin or is_owner):
             return jsonify({"error": "No tienes permiso para eliminar esta calificación"}), 403
         
         # Eliminar la calificación
@@ -3457,6 +3931,8 @@ def get_trip_average_rating(trip_id):
     finally:
         if 'cursor' in locals(): cursor.close()
         if connection: connection.close()
+
+
                 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", debug=True, port=5000)
