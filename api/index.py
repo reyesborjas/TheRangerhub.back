@@ -1118,17 +1118,60 @@ def create_or_update_trip():
         else:
             body = request.form.to_dict()
         
-        # Verificar si estamos actualizando un viaje existente
+        # Validar campos requeridos para status update
         trip_id = body.get('id')
+        new_status = body.get('trip_status')
+
+        # Definir estados válidos
+        ALLOWED_STATUSES = ['Confirmado', 'Pendiente', 'Cancelado', 'pending']
         
-        # Validar campos requeridos
+        # Si se intenta actualizar solo el estado
+        if trip_id and new_status:
+            # Validar que el estado sea uno de los permitidos
+            if new_status not in ALLOWED_STATUSES:
+                return jsonify({
+                    "message": f"Estado inválido. Estados permitidos: {', '.join(ALLOWED_STATUSES)}",
+                    "allowed_statuses": ALLOWED_STATUSES
+                }), 400
+            
+            # Actualizar solo el estado del viaje
+            cursor.execute("""
+                UPDATE trips 
+                SET trip_status = %s 
+                WHERE id = %s 
+                RETURNING id
+            """, (new_status, trip_id))
+            
+            result = cursor.fetchone()
+            if not result:
+                return jsonify({
+                    "message": f"No se encontró un viaje con ID {trip_id}",
+                    "error": "trip_not_found"
+                }), 404
+            
+            # Log de cambio de estado (opcional)
+            logging.info(f"Trip {trip_id} status updated to {new_status}")
+            
+            connection.commit()
+            
+            return jsonify({
+                "message": "Estado del viaje actualizado exitosamente",
+                "id": str(trip_id),
+                "new_status": new_status
+            }), 200
+        
+        # Si no es una actualización de estado, usar la lógica original
+        # Verificar campos requeridos para creación/actualización completa
         required_fields = ['trip_name', 'lead_ranger', 'start_date', 'end_date']
         for field in required_fields:
             if field not in body:
-                return jsonify({"message": f"Campo requerido faltante: {field}"}), 400
+                return jsonify({
+                    "message": f"Campo requerido faltante: {field}",
+                    "missing_field": field
+                }), 400
 
+        # Si existe trip_id, actualizar viaje existente
         if trip_id:
-            # ACTUALIZAR VIAJE EXISTENTE
             cursor.execute("""
                 UPDATE trips SET
                     trip_name = %s,
@@ -1159,7 +1202,10 @@ def create_or_update_trip():
             
             result = cursor.fetchone()
             if not result:
-                return jsonify({"message": f"No se encontró un viaje con ID {trip_id}"}), 404
+                return jsonify({
+                    "message": f"No se encontró un viaje con ID {trip_id}",
+                    "error": "trip_not_found"
+                }), 404
                 
             connection.commit()
             
@@ -1168,7 +1214,7 @@ def create_or_update_trip():
                 "id": str(trip_id)
             }), 200
         else:
-            # CREAR NUEVO VIAJE
+            # Crear nuevo viaje
             cursor.execute("""
                 INSERT INTO trips (
                     trip_name, start_date, end_date, max_participants_number,
@@ -1200,11 +1246,23 @@ def create_or_update_trip():
             }), 201
 
     except Exception as e:
-        logging.error(f"Error en operación de viaje: {str(e)}")
-        return jsonify({"message": f"Error interno del servidor: {str(e)}"}), 500
+        # Rollback en caso de error
+        if connection:
+            connection.rollback()
+        
+        # Logging detallado del error
+        logging.error(f"Error en operación de viaje: {str(e)}", exc_info=True)
+        
+        return jsonify({
+            "message": "Error interno del servidor",
+            "error_details": str(e)
+        }), 500
     finally:
-        cursor.close()
-        connection.close()
+        # Asegurar cierre de cursor y conexión
+        if cursor:
+            cursor.close()
+        if connection:
+            connection.close()
         
 @app.route('/rangers', methods=['GET'])
 def get_rangers():
