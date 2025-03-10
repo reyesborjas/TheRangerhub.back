@@ -154,6 +154,7 @@ id uuid default uuid_generate_va() primary ke,
 trip_id uuid not null references trips(id) on delete cascade,
 user_id uuid not null references users(id) on delete cascade,
 calification numeric(2,1) not null
+user_comment text
 )
 
 CREATE TABLE ranger_activities (
