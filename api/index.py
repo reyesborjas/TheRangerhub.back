@@ -8,7 +8,7 @@ import traceback
 import jwt
 import psycopg2
 from psycopg2.extras import RealDictCursor, Json
-
+from decimal import Decimal
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from dotenv import load_dotenv
@@ -2268,7 +2268,7 @@ def create_payment():
         # Extract data
         user_id = request_data.get('user_id')
         trip_id = request_data.get('trip_id')
-        payment_amount = request_data.get('payment_amount')
+        payment_amount = Decimal(str(request_data.get('payment_amount'))).quantize(Decimal('0.01'))
         payment_method = request_data.get('payment_method')
         payment_voucher_url = request_data.get('payment_voucher_url')
         payment_date = request_data.get('payment_date')
