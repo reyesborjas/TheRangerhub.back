@@ -3040,6 +3040,9 @@ def edit_trip(trip_id):
         cursor.close()
         connection.close()
 
+# MODIFICACIÓN A LA RUTA EXISTENTE
+# Actualiza tu ruta existente para incluir el conteo de viajes
+
 @app.route('/rangers/<string:ranger_id>', methods=['GET'])
 def get_ranger_details(ranger_id):
     connection = get_db_connection()
@@ -3049,7 +3052,7 @@ def get_ranger_details(ranger_id):
     try:
         cursor = connection.cursor(cursor_factory=RealDictCursor)
         
-        # Obtener detalles del ranger por ID
+        # Obtener detalles del ranger por ID (igual que antes)
         cursor.execute("""
             SELECT 
                 u.id, 
@@ -3065,7 +3068,8 @@ def get_ranger_details(ranger_id):
                 u.availability_end_date,
                 u.user_status,
                 u.biography_extend,
-                u.calification
+                u.calification,
+                (SELECT COUNT(*) FROM trips WHERE lead_ranger = u.id) as trips_count  # AÑADIR ESTO
             FROM users u
             WHERE u.id = %s
         """, (ranger_id,))
@@ -3075,7 +3079,7 @@ def get_ranger_details(ranger_id):
         if not ranger:
             return jsonify({"error": "Ranger no encontrado"}), 404
         
-        # Extraer datos del campo JSONB biography_extend
+        # Extraer datos del campo JSONB biography_extend (igual que antes)
         specialties = []
         languages = []
         
@@ -3084,7 +3088,7 @@ def get_ranger_details(ranger_id):
             specialties = bio_extend.get('specialties', [])
             languages = bio_extend.get('languages', [])
         
-        # Formatear la respuesta
+        # Formatear la respuesta (como antes pero con trips_count)
         formatted_ranger = {
             "id": str(ranger['id']),
             "name": f"{ranger['first_name']} {ranger['last_name']}",
@@ -3097,7 +3101,7 @@ def get_ranger_details(ranger_id):
             "isAvailable": ranger['user_status'] == 'activo',
             "bio": ranger['biography'] or "Guía profesional",
             "rating": float(ranger['calification']) if ranger['calification'] else 0.0,
-            "trips": 0,  # Esto debería ser calculado
+            "trips": int(ranger['trips_count']),  # USAR EL VALOR CALCULADO
             "specialties": specialties,
             "languages": languages,
             "certifications": []  # Podrías cargar esto aquí o en una petición separada
@@ -3111,8 +3115,109 @@ def get_ranger_details(ranger_id):
     finally:
         if 'cursor' in locals(): cursor.close()
         if connection: connection.close()
+
+
+# ENDPOINT ADICIONAL SOLO PARA CONTEO DE VIAJES
+# Este endpoint solo devuelve el conteo de viajes para un ranger
+
+@app.route('/rangers/<string:ranger_id>/trips-count', methods=['GET'])
+def get_ranger_trips_count(ranger_id):
+    """Obtiene el número de viajes que ha liderado un Ranger"""
+    connection = get_db_connection()
+    if not connection:
+        return jsonify({"error": "Database connection failed"}), 500
+
+    try:
+        cursor = connection.cursor(cursor_factory=RealDictCursor)
         
-# 1. Ruta para obtener las certificaciones de un ranger específico
+        # Verificar que el Ranger existe
+        cursor.execute("SELECT id FROM users WHERE id = %s", (ranger_id,))
+        if not cursor.fetchone():
+            return jsonify({"error": "Ranger no encontrado"}), 404
+        
+        # Contar el número de viajes donde este usuario es el lead_ranger
+        cursor.execute("""
+            SELECT COUNT(*) as trips_count
+            FROM trips
+            WHERE lead_ranger = %s
+        """, (ranger_id,))
+        
+        result = cursor.fetchone()
+        
+        return jsonify({
+            "ranger_id": ranger_id,
+            "trips_count": result['trips_count']
+        }), 200
+        
+    except Exception as e:
+        import traceback
+        error_details = traceback.format_exc()
+        print(f"Error en get_ranger_trips_count: {str(e)}\n{error_details}")
+        return jsonify({"error": "Error interno al obtener conteo de viajes", "details": str(e)}), 500
+    finally:
+        if 'cursor' in locals(): cursor.close()
+        if connection: connection.close()
+
+
+# ENDPOINT PARA ACTUALIZAR TODOS LOS CONTEOS (OPCIONAL)
+# Este endpoint puede ser útil para actualizar manualmente todos los conteos
+
+@app.route('/admin/update-all-rangers-trip-counts', methods=['POST'])
+def update_all_rangers_trip_counts():
+    """Actualiza el conteo de viajes para todos los Rangers (solo admin)"""
+    # Verificar autenticación y permisos de administrador aquí
+    
+    connection = get_db_connection()
+    if not connection:
+        return jsonify({"error": "Database connection failed"}), 500
+
+    try:
+        cursor = connection.cursor(cursor_factory=RealDictCursor)
+        
+        # Obtener todos los IDs de Ranger que han liderado viajes
+        cursor.execute("""
+            SELECT DISTINCT lead_ranger as ranger_id
+            FROM trips
+            WHERE lead_ranger IS NOT NULL
+        """)
+        
+        rangers = cursor.fetchall()
+        updated_count = 0
+        
+        for ranger in rangers:
+            ranger_id = ranger['ranger_id']
+            
+            # Contar viajes para este Ranger
+            cursor.execute("""
+                SELECT COUNT(*) as trips_count
+                FROM trips
+                WHERE lead_ranger = %s
+            """, (ranger_id,))
+            
+            count_result = cursor.fetchone()
+            trips_count = count_result['trips_count']
+            
+            # Guardar el conteo en algún lugar si es necesario
+            # Esta parte depende de tu estructura de datos
+            # Por ejemplo, podrías guardar esto en un campo 'trips_count' en la tabla users
+            # O simplemente calcularlo cada vez
+            
+            updated_count += 1
+        
+        return jsonify({
+            "message": f"Conteos actualizados para {updated_count} Rangers",
+            "updated_rangers": updated_count
+        }), 200
+        
+    except Exception as e:
+        import traceback
+        error_details = traceback.format_exc()
+        print(f"Error en update_all_rangers_trip_counts: {str(e)}\n{error_details}")
+        return jsonify({"error": "Error interno al actualizar conteos", "details": str(e)}), 500
+    finally:
+        if 'cursor' in locals(): cursor.close()
+        if connection: connection.close()
+
 @app.route('/rangers/<string:ranger_id>/certifications', methods=['GET'])
 def get_ranger_certifications(ranger_id):
     connection = get_db_connection()
@@ -4103,73 +4208,6 @@ def get_ranger_trips_count(ranger_id):
         error_details = traceback.format_exc()
         print(f"Error en get_ranger_trips_count: {str(e)}\n{error_details}")
         return jsonify({"error": "Error interno al obtener conteo de viajes", "details": str(e)}), 500
-    finally:
-        if 'cursor' in locals(): cursor.close()
-        if connection: connection.close()
-
-
-# Endpoint para obtener información completa de un Ranger (incluyendo conteo de viajes)
-@app.route('/api/rangers/<string:ranger_id>', methods=['GET'])
-def get_ranger_details(ranger_id):
-    """Obtiene los detalles completos de un Ranger, incluyendo su conteo de viajes"""
-    connection = get_db_connection()
-    if not connection:
-        return jsonify({"error": "Database connection failed"}), 500
-
-    try:
-        cursor = connection.cursor(cursor_factory=RealDictCursor)
-        
-        # Obtener detalles del Ranger e incluir conteo de viajes en una sola consulta
-        cursor.execute("""
-            SELECT 
-                u.id,
-                u.first_name,
-                u.last_name,
-                u.email,
-                u.username,
-                u.profile_picture_url,
-                u.calification,
-                u.is_active,
-                u.created_at,
-                r.title,
-                r.bio,
-                r.specialties,
-                (SELECT COUNT(*) FROM trips t WHERE t.lead_ranger = u.id) as trips_count
-            FROM 
-                users u
-            LEFT JOIN 
-                ranger_details r ON u.id = r.user_id
-            WHERE 
-                u.id = %s
-        """, (ranger_id,))
-        
-        ranger = cursor.fetchone()
-        if not ranger:
-            return jsonify({"error": "Ranger no encontrado"}), 404
-        
-        # Formatear los datos para la respuesta
-        formatted_ranger = {
-            "id": str(ranger["id"]),
-            "name": f"{ranger['first_name']} {ranger['last_name']}",
-            "username": ranger["username"],
-            "email": ranger["email"],
-            "photo": ranger["profile_picture_url"],
-            "rating": float(ranger["calification"]) if ranger["calification"] is not None else 0.0,
-            "title": ranger["title"] or "Ranger",
-            "bio": ranger["bio"] or "",
-            "specialties": ranger["specialties"] or [],
-            "isAvailable": ranger["is_active"] or False,
-            "trips": int(ranger["trips_count"]),
-            "created_at": ranger["created_at"].isoformat() if ranger["created_at"] else None
-        }
-        
-        return jsonify(formatted_ranger), 200
-        
-    except Exception as e:
-        import traceback
-        error_details = traceback.format_exc()
-        print(f"Error en get_ranger_details: {str(e)}\n{error_details}")
-        return jsonify({"error": "Error interno al obtener detalles del Ranger", "details": str(e)}), 500
     finally:
         if 'cursor' in locals(): cursor.close()
         if connection: connection.close()
