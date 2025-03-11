@@ -2365,6 +2365,7 @@ def create_payment():
                 
                 # Log the fetchone result
                 app.logger.info(f"Fetchone result: {result}")
+                app.logger.info(f"Fetchone result type: {type(result)}")
                 
                 # Validate the insert
                 if result is None:
@@ -2374,6 +2375,15 @@ def create_payment():
                 
                 # Get the inserted payment ID
                 payment_id = result[0]
+                
+                 # Handle RealDictRow
+                if result is None:
+                    app.logger.error("No row was inserted")
+                    connection.rollback()
+                    return jsonify({"error": "No se pudo crear el pago"}), 500
+                
+                # Extract payment ID for RealDictRow
+                payment_id = result.get('id') if hasattr(result, 'get') else result['id']
                 
                 # Commit transaction
                 connection.commit()
