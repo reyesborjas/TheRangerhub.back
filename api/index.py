@@ -2258,66 +2258,101 @@ def delete_activity_trip(trip_id, activity_id):
 @app.route('/payments', methods=['POST'])
 def create_payment():
     try:
+        # Log incoming request data for debugging
+        app.logger.info(f"Received payment request: {request.get_json()}")
+        
         # Obtener datos del request
         data = request.get_json()
         
-        # Validar datos de entrada
-        user_id = data.get('user_id')
-        trip_id = data.get('trip_id')
-        payment_amount = data.get('payment_amount')
-        payment_method = data.get('payment_method')
-        payment_voucher_url = data.get('payment_voucher_url', None)  # Opcional
+        # Validate and type-cast input data
+        try:
+            user_id = str(data.get('user_id'))
+            trip_id = str(data.get('trip_id'))
+            payment_amount = float(data.get('payment_amount'))
+            payment_method = str(data.get('payment_method'))
+            payment_voucher_url = str(data.get('payment_voucher_url', ''))
+            payment_date = data.get('payment_date', datetime.now().date())
+        except (ValueError, TypeError) as cast_error:
+            app.logger.error(f"Data type conversion error: {cast_error}")
+            return jsonify({"error": f"Error en formato de datos: {str(cast_error)}"}), 400
         
         # Validaciones básicas
-        if not all([user_id, trip_id, payment_amount, payment_method]):
+        if not user_id or not trip_id or not payment_method:
+            app.logger.warning("Incomplete payment data")
             return jsonify({"error": "Datos de pago incompletos"}), 400
+        
+        # Validate payment amount
+        if payment_amount <= 0:
+            app.logger.warning(f"Invalid payment amount: {payment_amount}")
+            return jsonify({"error": "Monto de pago inválido"}), 400
         
         # Establecer conexión a la base de datos
         connection = get_db_connection()
         cursor = connection.cursor()
         
-        # Insertar pago con estado pendiente por defecto
-        cursor.execute("""
-            INSERT INTO payment (
+        try:
+            # Verificar si el usuario existe
+            cursor.execute("SELECT id FROM users WHERE id = %s", (user_id,))
+            if not cursor.fetchone():
+                return jsonify({"error": "Usuario no encontrado"}), 404
+            
+            # Verificar si el viaje existe
+            cursor.execute("SELECT id FROM trips WHERE id = %s", (trip_id,))
+            if not cursor.fetchone():
+                return jsonify({"error": "Viaje no encontrado"}), 404
+            
+            # Insertar pago con estado pendiente por defecto
+            cursor.execute("""
+                INSERT INTO payments (
+                    user_id, 
+                    trip_id, 
+                    payment_amount, 
+                    payment_method, 
+                    payment_date, 
+                    payment_voucher_url,
+                    payment_status
+                ) VALUES (%s, %s, %s, %s, %s, %s, 'pending')
+                RETURNING id
+            """, (
                 user_id, 
                 trip_id, 
                 payment_amount, 
-                payment_method, 
-                payment_date, 
-                payment_voucher_url,
-                payment_status
-            ) VALUES (%s, %s, %s, %s, CURRENT_DATE, %s, 'pending')
-            RETURNING id
-        """, (
-            user_id, 
-            trip_id, 
-            payment_amount, 
-            payment_method,
-            payment_voucher_url
-        ))
+                payment_method,
+                payment_date,
+                payment_voucher_url
+            ))
+            
+            # Obtener el ID del pago insertado
+            payment_id = cursor.fetchone()[0]
+            
+            # Commit de la transacción
+            connection.commit()
+            
+            app.logger.info(f"Payment created successfully: {payment_id}")
+            
+            return jsonify({
+                "message": "Pago iniciado correctamente", 
+                "payment_id": payment_id
+            }), 201
         
-        # Obtener el ID del pago insertado
-        payment_id = cursor.fetchone()[0]
+        except psycopg2.Error as db_error:
+            # Rollback in case of database error
+            connection.rollback()
+            app.logger.error(f"Database error: {db_error}")
+            return jsonify({"error": f"Error de base de datos: {str(db_error)}"}), 500
         
-        # Commit de la transacción
-        connection.commit()
-        
-        return jsonify({
-            "message": "Pago iniciado correctamente", 
-            "payment_id": payment_id
-        }), 201
-    
     except Exception as e:
-        # Manejo de errores
-        logging.error(f"Error creating payment: {str(e)}")
+        # Manejo de errores generales
+        app.logger.error(f"Unexpected error creating payment: {str(e)}", exc_info=True)
         return jsonify({"error": "Error al procesar el pago"}), 500
+    
     finally:
         # Cerrar cursor y conexión
         if 'cursor' in locals():
             cursor.close()
         if 'connection' in locals():
             connection.close()
-
+            
 @app.route('/trips/action', methods=['POST'])
 def trip_action():
     """
