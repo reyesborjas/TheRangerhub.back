@@ -3700,7 +3700,7 @@ def create_calification():
         if 'cursor' in locals(): cursor.close()
         if connection: connection.close()
         
-  # Rutas para la API de calificaciones de Rangers
+# Rutas para la API de calificaciones de Rangers siguiendo el mismo patrón que las rutas existentes
 
 @app.route('/api/ranger-califications', methods=['POST'])
 def create_ranger_calification():
@@ -3812,7 +3812,7 @@ def create_ranger_calification():
         if 'cursor' in locals(): cursor.close()
         if connection: connection.close()
 
-@app.route('/api/ranger-califications/<string:calification_id>', methods=['PUT'])
+@app.route('/api/ranger-califications/<calification_id>', methods=['PUT'])
 def update_ranger_calification(calification_id):
     """Actualiza una calificación de Ranger existente"""
     connection = get_db_connection()
@@ -3913,7 +3913,7 @@ def update_ranger_calification(calification_id):
         if 'cursor' in locals(): cursor.close()
         if connection: connection.close()
 
-@app.route('/api/ranger-califications/<string:calification_id>', methods=['DELETE'])
+@app.route('/api/ranger-califications/<calification_id>', methods=['DELETE'])
 def delete_ranger_calification(calification_id):
     """Elimina una calificación de Ranger existente"""
     connection = get_db_connection()
@@ -3974,7 +3974,8 @@ def delete_ranger_calification(calification_id):
         if 'cursor' in locals(): cursor.close()
         if connection: connection.close()
 
-
+@app.route('/api/trips/<trip_id>/ranger-califications', methods=['GET'])
+def get_trip_ranger_califications(trip_id):
     """Obtiene todas las calificaciones de Ranger para un viaje específico"""
     connection = get_db_connection()
     if not connection:
@@ -3984,7 +3985,7 @@ def delete_ranger_calification(calification_id):
         cursor = connection.cursor(cursor_factory=RealDictCursor)
         
         # Verificar que el viaje existe
-        cursor.execute("SELECT id FROM trips WHERE id::text = %s", (trip_id,))
+        cursor.execute("SELECT id FROM trips WHERE id = %s", (trip_id,))
         if not cursor.fetchone():
             return jsonify({"error": "Viaje no encontrado"}), 404
         
@@ -4001,7 +4002,7 @@ def delete_ranger_calification(calification_id):
                 rc.created_at
             FROM ranger_califications rc
             JOIN users u ON rc.user_id = u.id
-            WHERE rc.trip_id::text = %s
+            WHERE rc.trip_id = %s
             ORDER BY rc.created_at DESC
         """, (trip_id,))
         
@@ -4025,48 +4026,8 @@ def delete_ranger_calification(calification_id):
         if 'cursor' in locals(): cursor.close()
         if connection: connection.close()
 
-@app.route('/api/trips/<string:trip_id>/ranger-rating', methods=['GET'])
+@app.route('/api/trips/<trip_id>/ranger-rating', methods=['GET'])
 def get_trip_ranger_rating(trip_id):
-    """Obtiene el promedio de calificaciones del Ranger para un viaje"""
-    connection = get_db_connection()
-    if not connection:
-        return jsonify({"error": "Database connection failed"}), 500
-
-    try:
-        cursor = connection.cursor(cursor_factory=RealDictCursor)
-        
-        # Verificar que el viaje existe
-        cursor.execute("SELECT id FROM trips WHERE id::text = %s", (trip_id,))
-        if not cursor.fetchone():
-            return jsonify({"error": "Viaje no encontrado"}), 404
-        
-        # Obtener el promedio y conteo de calificaciones
-        cursor.execute("""
-            SELECT 
-                AVG(calification) as average,
-                COUNT(id) as count
-            FROM ranger_califications
-            WHERE trip_id::text = %s
-        """, (trip_id,))
-        
-        result = cursor.fetchone()
-        average = float(result['average']) if result['average'] else 0
-        
-        return jsonify({
-            "trip_id": trip_id,
-            "average_rating": round(average, 1),
-            "rating_count": result['count']
-        }), 200
-        
-    except Exception as e:
-        import traceback
-        error_details = traceback.format_exc()
-        print(f"Error en get_trip_ranger_rating: {str(e)}\n{error_details}")
-        return jsonify({"error": "Error interno al obtener promedio de calificaciones", "details": str(e)}), 500
-    finally:
-        if 'cursor' in locals(): cursor.close()
-        if connection: connection.close()
-
     """Obtiene el promedio de calificaciones del Ranger para un viaje"""
     connection = get_db_connection()
     if not connection:
@@ -4106,6 +4067,6 @@ def get_trip_ranger_rating(trip_id):
     finally:
         if 'cursor' in locals(): cursor.close()
         if connection: connection.close()
-                
+                     
 if __name__ == "__main__":
     app.run(host="0.0.0.0", debug=True, port=5000)
