@@ -2507,6 +2507,70 @@ def get_payment_info(user_id, trip_id):
             cursor.close()
         if connection:
             connection.close()
+@app.route('/payments/trip/<trip_id>', methods=['GET'])
+def get_trip_payments(trip_id):
+    connection = None
+    cursor = None
+
+    try:
+        connection = get_db_connection()
+        cursor = connection.cursor()
+
+        # Obtener todos los pagos asociados a este viaje
+        cursor.execute("""
+            SELECT 
+                id, 
+                user_id, 
+                trip_id, 
+                payment_amount, 
+                payment_method, 
+                payment_date, 
+                payment_voucher_url, 
+                payment_status
+            FROM payments 
+            WHERE trip_id = %s
+        """, (trip_id,))
+        
+        payments = cursor.fetchall()
+        
+        if not payments:
+            return jsonify([]), 200
+        
+        # Convertir los resultados a un array de diccionarios
+        payment_list = []
+        for payment in payments:
+            payment_data = {
+                "id": str(payment['id']),
+                "user_id": str(payment['user_id']),
+                "trip_id": str(payment['trip_id']),
+                "payment_amount": float(payment['payment_amount']) if payment['payment_amount'] else None,
+                "payment_method": payment['payment_method'],
+                "payment_date": payment['payment_date'].isoformat() if payment['payment_date'] else None,
+                "payment_voucher_url": payment['payment_voucher_url'],
+                "payment_status": payment['payment_status']
+            }
+            payment_list.append(payment_data)
+        
+        return jsonify(payment_list), 200
+
+    except psycopg2.Error as db_error:
+        app.logger.error(f"Error de base de datos: {db_error}")
+        app.logger.error(f"Código de error: {db_error.pgcode}")
+        app.logger.error(f"Detalles del error: {db_error.pgerror}")
+
+        return jsonify({"error": f"Error al obtener pagos del viaje: {str(db_error)}"}), 500
+
+    except Exception as e:
+        app.logger.error(f"Error inesperado: {e}")
+        app.logger.error(f"Traceback: {traceback.format_exc()}")
+
+        return jsonify({"error": f"Error inesperado al obtener pagos del viaje: {str(e)}"}), 500
+    
+    finally:
+        if cursor:
+            cursor.close()
+        if connection:
+            connection.close()
 
 @app.route('/trips/action', methods=['POST'])
 def trip_action():
