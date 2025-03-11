@@ -12,6 +12,8 @@ from decimal import Decimal
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from dotenv import load_dotenv
+import psycopg2
+
 
 load_dotenv()
 app = Flask(__name__)
@@ -2255,13 +2257,6 @@ def delete_activity_trip(trip_id, activity_id):
         print(f"Error al eliminar: {str(e)}")
         return jsonify({"message": f"Error al eliminar la actividad: {str(e)}"}), 500
 
-import psycopg2
-from flask import Flask, request, jsonify
-import logging
-import traceback
-
-# ... (your get_db_connection() function) ...
-
 @app.route('/payments', methods=['POST'])
 def create_payment():
     connection = None
@@ -2316,7 +2311,8 @@ def create_payment():
                 connection.rollback()
                 return jsonify({"error": "No se pudo crear el pago"}), 500
 
-            payment_id = payment_result[0] #corrected line.
+            # Acceder al ID usando la clave 'id'
+            payment_id = payment_result['id']
 
             connection.commit()
 
