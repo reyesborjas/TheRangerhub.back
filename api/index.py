@@ -2278,7 +2278,7 @@ def create_payment():
         
         # Insertar pago con estado pendiente por defecto
         cursor.execute("""
-            INSERT INTO payments (
+            INSERT INTO payment (
                 user_id, 
                 trip_id, 
                 payment_amount, 
