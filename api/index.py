@@ -2254,6 +2254,7 @@ def delete_activity_trip(trip_id, activity_id):
             conn.close()
         print(f"Error al eliminar: {str(e)}")
         return jsonify({"message": f"Error al eliminar la actividad: {str(e)}"}), 500
+    
 @app.route('/payments', methods=['POST'])
 def create_payment():
     connection = None
@@ -2278,11 +2279,11 @@ def create_payment():
         if not all([user_id, trip_id, payment_amount, payment_method, payment_voucher_url]):
             return jsonify({"error": "Datos de pago incompletos"}), 400
 
-        try:
-            # Establecer conexión a la base de datos
-            connection = get_db_connection()
-            cursor = connection.cursor()
+        # Establecer conexión a la base de datos
+        connection = get_db_connection()
+        cursor = connection.cursor()
 
+        try:
             # Insertar pago
             cursor.execute("""
                 INSERT INTO payments (
@@ -2318,8 +2319,7 @@ def create_payment():
         
         except psycopg2.Error as e:
             # Rollback en caso de error
-            if connection:
-                connection.rollback()
+            connection.rollback()
             
             # Manejar errores específicos
             if e.pgcode == '23505':  # Violación de restricción única
@@ -2328,7 +2328,7 @@ def create_payment():
             return jsonify({"error": "Error al procesar el pago"}), 500
         
         finally:
-            # Cerrar cursor y conexión
+            # Cerrar cursor y conexión solo si existen
             if cursor:
                 cursor.close()
             if connection:
@@ -2337,7 +2337,7 @@ def create_payment():
     except Exception as e:
         # Manejo de errores generales
         return jsonify({"error": "Error inesperado al procesar el pago"}), 500
-
+    
 def get_db_connection():
     """Conecta a la base de datos PostgreSQL"""
     try:
