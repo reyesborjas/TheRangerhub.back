@@ -930,6 +930,84 @@ def get_trip_activities(trip_id):
         cursor.close()
         connection.close()
 
+@app.route('/trips/<string:trip_id>/status', methods=['PUT'])
+def update_trip_status(trip_id):
+    connection = get_db_connection()
+    if not connection:
+        return jsonify({"message": "Error de conexión con la base de datos"}), 500
+
+    cursor = connection.cursor()
+    try:
+        # Obtener el nuevo estado del cuerpo de la solicitud
+        body = request.get_json()
+        new_status = body.get('status')
+
+        if not new_status:
+            return jsonify({"message": "Estado no proporcionado"}), 400
+
+        # Actualizar el estado del viaje en la base de datos
+        cursor.execute("""
+            UPDATE trips 
+            SET trip_status = %s 
+            WHERE id = %s
+            RETURNING id
+        """, (new_status, trip_id))
+
+        updated = cursor.fetchone()
+        
+        if not updated:
+            return jsonify({"message": "Viaje no encontrado"}), 404
+
+        connection.commit()
+        return jsonify({"message": "Estado del viaje actualizado exitosamente"}), 200
+
+    except Exception as e:
+        connection.rollback()
+        logging.error(f"Error actualizando estado del viaje: {str(e)}")
+        return jsonify({"message": f"Error interno del servidor: {str(e)}"}), 500
+    finally:
+        cursor.close()
+        connection.close()
+
+@app.route('/reservations/trip/<string:trip_id>/user/<string:user_id>/status', methods=['PUT'])
+def update_reservation_status(trip_id, user_id):
+    connection = get_db_connection()
+    if not connection:
+        return jsonify({"message": "Error de conexión con la base de datos"}), 500
+
+    cursor = connection.cursor()
+    try:
+        # Obtener el nuevo estado del cuerpo de la solicitud
+        body = request.get_json()
+        new_status = body.get('status')
+
+        if not new_status:
+            return jsonify({"message": "Estado no proporcionado"}), 400
+
+        # Actualizar el estado de la reserva en la base de datos
+        cursor.execute("""
+            UPDATE reservations 
+            SET status = %s 
+            WHERE trip_id = %s AND user_id = %s
+            RETURNING id
+        """, (new_status, trip_id, user_id))
+
+        updated = cursor.fetchone()
+        
+        if not updated:
+            return jsonify({"message": "Reserva no encontrada"}), 404
+
+        connection.commit()
+        return jsonify({"message": "Estado de la reserva actualizado exitosamente"}), 200
+
+    except Exception as e:
+        connection.rollback()
+        logging.error(f"Error actualizando estado de la reserva: {str(e)}")
+        return jsonify({"message": f"Error interno del servidor: {str(e)}"}), 500
+    finally:
+        cursor.close()
+        connection.close()
+
 @app.route('/activitycategory', methods=['GET'])  
 def get_activity_categories():  
     """Obtiene todas las categorías de actividades"""  
