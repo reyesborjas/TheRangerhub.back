@@ -4172,45 +4172,7 @@ def get_trip_ranger_rating(trip_id):
     finally:
         if 'cursor' in locals(): cursor.close()
         if connection: connection.close()
-# Endpoint para obtener el número de viajes liderados por un Ranger
 
-@app.route('/api/rangers/<string:ranger_id>/trips-count', methods=['GET'])
-def get_ranger_trips_count(ranger_id):
-    """Obtiene el número de viajes que ha liderado un Ranger"""
-    connection = get_db_connection()
-    if not connection:
-        return jsonify({"error": "Database connection failed"}), 500
-
-    try:
-        cursor = connection.cursor(cursor_factory=RealDictCursor)
-        
-        # Verificar que el Ranger existe
-        cursor.execute("SELECT id FROM users WHERE id = %s", (ranger_id,))
-        if not cursor.fetchone():
-            return jsonify({"error": "Ranger no encontrado"}), 404
-        
-        # Contar el número de viajes donde este usuario es el lead_ranger
-        cursor.execute("""
-            SELECT COUNT(*) as trips_count
-            FROM trips
-            WHERE lead_ranger = %s
-        """, (ranger_id,))
-        
-        result = cursor.fetchone()
-        
-        return jsonify({
-            "ranger_id": ranger_id,
-            "trips_count": result['trips_count']
-        }), 200
-        
-    except Exception as e:
-        import traceback
-        error_details = traceback.format_exc()
-        print(f"Error en get_ranger_trips_count: {str(e)}\n{error_details}")
-        return jsonify({"error": "Error interno al obtener conteo de viajes", "details": str(e)}), 500
-    finally:
-        if 'cursor' in locals(): cursor.close()
-        if connection: connection.close()
 
 
 # Endpoint para obtener lista de Rangers (con conteo de viajes)
