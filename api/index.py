@@ -2281,6 +2281,8 @@ def create_payment():
 
         # Establecer conexión a la base de datos
         connection = get_db_connection()
+        if connection is None:
+            return jsonify({"error": "Error de conexión a la base de datos"}), 500
         cursor = connection.cursor()
 
         try:
@@ -2307,7 +2309,13 @@ def create_payment():
             ))
             
             # Obtener el ID del pago insertado
-            payment_id = cursor.fetchone()[0]
+            payment_result = cursor.fetchone()
+            if not payment_result:
+                connection.rollback()
+                return jsonify({"error": "No se pudo crear el pago"}), 500
+            
+            # Obtener el ID (con RealDictCursor)
+            payment_id = payment_result['id']
             
             # Commit de la transacción
             connection.commit()
