@@ -2274,21 +2274,15 @@ def create_payment():
         payment_date = data.get('payment_date', datetime.now().date())
         payment_status = 'Pendiente'
 
-        # Registro detallado de datos recibidos
-        app.logger.info(f"Datos de pago recibidos: {data}")
-
         # Validaciones básicas
         if not all([user_id, trip_id, payment_amount, payment_method, payment_voucher_url]):
-            app.logger.warning("Datos de pago incompletos")
             return jsonify({"error": "Datos de pago incompletos"}), 400
 
-        # Establecer conexión a la base de datos
-        connection = get_db_connection()
-        
-        # Usar cursor normal en lugar de RealDictCursor para esta operación
-        cursor = connection.cursor()
-
         try:
+            # Establecer conexión a la base de datos
+            connection = get_db_connection()
+            cursor = connection.cursor()
+
             # Insertar pago
             cursor.execute("""
                 INSERT INTO payments (
@@ -2312,24 +2306,10 @@ def create_payment():
             ))
             
             # Obtener el ID del pago insertado
-            result = cursor.fetchone()
-            
-            # Registrar resultado de la inserción
-            app.logger.info(f"Resultado de inserción: {result}")
-            
-            # Verificar si se insertó correctamente
-            if result is None:
-                app.logger.error("No se pudo insertar el pago")
-                connection.rollback()
-                return jsonify({"error": "No se pudo crear el pago"}), 500
-            
-            # Obtener el ID del pago
-            payment_id = result[0]
+            payment_id = cursor.fetchone()[0]
             
             # Commit de la transacción
             connection.commit()
-            
-            app.logger.info(f"Pago creado exitosamente. ID: {payment_id}")
             
             return jsonify({
                 "message": "Pago iniciado correctamente", 
@@ -2341,16 +2321,11 @@ def create_payment():
             if connection:
                 connection.rollback()
             
-            # Registrar error detallado
-            app.logger.error(f"Error de base de datos: {e}")
-            app.logger.error(f"Código de error: {e.pgcode}")
-            app.logger.error(f"Detalles del error: {e.pgerror}")
-            
             # Manejar errores específicos
             if e.pgcode == '23505':  # Violación de restricción única
                 return jsonify({"error": "El comprobante de pago ya ha sido registrado"}), 400
             
-            return jsonify({"error": f"Error al procesar el pago: {str(e)}"}), 500
+            return jsonify({"error": "Error al procesar el pago"}), 500
         
         finally:
             # Cerrar cursor y conexión
@@ -2361,9 +2336,7 @@ def create_payment():
     
     except Exception as e:
         # Manejo de errores generales
-        app.logger.error(f"Error inesperado: {e}")
-        app.logger.error(traceback.format_exc())
-        return jsonify({"error": f"Error inesperado al procesar el pago: {str(e)}"}), 500
+        return jsonify({"error": "Error inesperado al procesar el pago"}), 500
 
 def get_db_connection():
     """Conecta a la base de datos PostgreSQL"""
