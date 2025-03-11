@@ -2255,19 +2255,22 @@ def delete_activity_trip(trip_id, activity_id):
         print(f"Error al eliminar: {str(e)}")
         return jsonify({"message": f"Error al eliminar la actividad: {str(e)}"}), 500
 
+import psycopg2
+from flask import Flask, request, jsonify
+import logging
+import traceback
+
+# ... (your get_db_connection() function) ...
+
 @app.route('/payments', methods=['POST'])
 def create_payment():
     connection = None
     cursor = None
-    
+
     try:
-        # Obtener datos del request
         data = request.get_json()
-        
-        # Log de datos recibidos
         app.logger.info(f"Datos recibidos: {data}")
 
-        # Extraer datos necesarios
         user_id = data.get('user_id')
         trip_id = data.get('trip_id')
         payment_amount = data.get('payment_amount')
@@ -2276,91 +2279,77 @@ def create_payment():
         payment_date = data.get('payment_date')
         payment_status = 'Pendiente'
 
-        # Validaciones básicas
         required_fields = [user_id, trip_id, payment_amount, payment_method, payment_voucher_url]
         if not all(required_fields):
             app.logger.warning("Campos requeridos incompletos")
             return jsonify({"error": "Datos de pago incompletos"}), 400
 
         try:
-            # Establecer conexión
             connection = get_db_connection()
             cursor = connection.cursor()
 
-            # Insertar pago
             cursor.execute("""
                 INSERT INTO payments (
-                    user_id, 
-                    trip_id, 
-                    payment_amount, 
-                    payment_method, 
-                    payment_date, 
+                    user_id,
+                    trip_id,
+                    payment_amount,
+                    payment_method,
+                    payment_date,
                     payment_voucher_url,
                     payment_status
                 ) VALUES (%s, %s, %s, %s, %s, %s, %s)
                 RETURNING id
             """, (
-                user_id, 
-                trip_id, 
-                payment_amount, 
+                user_id,
+                trip_id,
+                payment_amount,
                 payment_method,
                 payment_date,
                 payment_voucher_url,
                 payment_status
             ))
-            
-            # Obtener ID del pago
+
             payment_result = cursor.fetchone()
-            
-            # Log del resultado
             app.logger.info(f"Resultado inserción: {payment_result}")
-            
+
             if payment_result is None:
                 connection.rollback()
                 return jsonify({"error": "No se pudo crear el pago"}), 500
-            
-            # Obtener ID de pago (asumiendo que es el primer elemento)
-            payment_id = payment_result[0]
-            
-            # Commit
+
+            payment_id = payment_result[0] #corrected line.
+
             connection.commit()
-            
+
             return jsonify({
-                "message": "Pago iniciado correctamente", 
-                "payment_id": str(payment_id)  # Convertir UUID a string
+                "message": "Pago iniciado correctamente",
+                "payment_id": str(payment_id)
             }), 201
-        
+
         except psycopg2.Error as db_error:
-            # Rollback en caso de error
             if connection:
                 connection.rollback()
-            
-            # Log de error específico de PostgreSQL
+
             app.logger.error(f"Error de base de datos: {db_error}")
             app.logger.error(f"Código de error: {db_error.pgcode}")
             app.logger.error(f"Detalles del error: {db_error.pgerror}")
-            
-            # Manejar errores específicos
-            if db_error.pgcode == '23505':  # Violación de restricción única
+
+            if db_error.pgcode == '23505':
                 return jsonify({"error": "El comprobante de pago ya ha sido registrado"}), 400
-            
+
             return jsonify({"error": f"Error al procesar el pago: {str(db_error)}"}), 500
-        
+
         finally:
-            # Cerrar cursor y conexión
             if cursor:
                 cursor.close()
             if connection:
                 connection.close()
-    
+
     except Exception as e:
-        # Manejo de errores generales
         app.logger.error(f"Error inesperado: {e}")
-        import traceback
         app.logger.error(f"Traceback: {traceback.format_exc()}")
-        
+
         return jsonify({"error": f"Error inesperado al procesar el pago: {str(e)}"}), 500
- 
+
 @app.route('/trips/action', methods=['POST'])
 def trip_action():
     """
