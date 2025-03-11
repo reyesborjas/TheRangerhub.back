@@ -2346,6 +2346,168 @@ def create_payment():
 
         return jsonify({"error": f"Error inesperado al procesar el pago: {str(e)}"}), 500
 
+@app.route('/payments/trip/<trip_id>/user/<user_id>/status', methods=['PUT'])
+def update_payment_status(trip_id, user_id):
+    connection = None
+    cursor = None
+
+    try:
+        data = request.get_json()
+        payment_status = data.get('payment_status')
+
+        if not payment_status:
+            return jsonify({"error": "El estado de pago es requerido"}), 400
+
+        # Validar que el estado sea válido
+        valid_statuses = ['Pendiente', 'Confirmado', 'Rechazado']
+        if payment_status not in valid_statuses:
+            return jsonify({"error": f"Estado de pago no válido. Debe ser uno de: {', '.join(valid_statuses)}"}), 400
+
+        connection = get_db_connection()
+        cursor = connection.cursor()
+
+        # Verificar si existe un pago para este usuario y viaje
+        cursor.execute("""
+            SELECT id FROM payments 
+            WHERE user_id = %s AND trip_id = %s
+        """, (user_id, trip_id))
+        
+        payment = cursor.fetchone()
+        
+        if payment:
+            # Actualizar el estado del pago existente
+            cursor.execute("""
+                UPDATE payments 
+                SET payment_status = %s, updated_at = CURRENT_TIMESTAMP
+                WHERE user_id = %s AND trip_id = %s
+                RETURNING id
+            """, (payment_status, user_id, trip_id))
+            
+            updated_payment = cursor.fetchone()
+            
+            if not updated_payment:
+                connection.rollback()
+                return jsonify({"error": "No se pudo actualizar el estado del pago"}), 500
+            
+            connection.commit()
+            
+            return jsonify({
+                "message": "Estado de pago actualizado correctamente",
+                "payment_id": str(updated_payment['id'])
+            }), 200
+        else:
+            # Crear un nuevo registro de pago con estado
+            cursor.execute("""
+                INSERT INTO payments (
+                    user_id,
+                    trip_id,
+                    payment_status,
+                    payment_date
+                ) VALUES (%s, %s, %s, CURRENT_DATE)
+                RETURNING id
+            """, (
+                user_id,
+                trip_id,
+                payment_status
+            ))
+            
+            new_payment = cursor.fetchone()
+            
+            if not new_payment:
+                connection.rollback()
+                return jsonify({"error": "No se pudo crear el registro de pago"}), 500
+            
+            connection.commit()
+            
+            return jsonify({
+                "message": "Registro de pago creado correctamente",
+                "payment_id": str(new_payment['id'])
+            }), 201
+
+    except psycopg2.Error as db_error:
+        if connection:
+            connection.rollback()
+
+        app.logger.error(f"Error de base de datos: {db_error}")
+        app.logger.error(f"Código de error: {db_error.pgcode}")
+        app.logger.error(f"Detalles del error: {db_error.pgerror}")
+
+        return jsonify({"error": f"Error al procesar la actualización del estado de pago: {str(db_error)}"}), 500
+
+    except Exception as e:
+        app.logger.error(f"Error inesperado: {e}")
+        app.logger.error(f"Traceback: {traceback.format_exc()}")
+
+        return jsonify({"error": f"Error inesperado al procesar la actualización del estado de pago: {str(e)}"}), 500
+    
+    finally:
+        if cursor:
+            cursor.close()
+        if connection:
+            connection.close()
+
+@app.route('/payments/user/<user_id>/trip/<trip_id>', methods=['GET'])
+def get_payment_info(user_id, trip_id):
+    connection = None
+    cursor = None
+
+    try:
+        connection = get_db_connection()
+        cursor = connection.cursor()
+
+        # Obtener información del pago
+        cursor.execute("""
+            SELECT 
+                id, 
+                user_id, 
+                trip_id, 
+                payment_amount, 
+                payment_method, 
+                payment_date, 
+                payment_voucher_url, 
+                payment_status
+            FROM payments 
+            WHERE user_id = %s AND trip_id = %s
+        """, (user_id, trip_id))
+        
+        payment = cursor.fetchone()
+        
+        if not payment:
+            return jsonify({"error": "No se encontró información de pago para este usuario y viaje"}), 404
+        
+        # Convertir el resultado a un diccionario
+        payment_data = {
+            "id": str(payment['id']),
+            "user_id": str(payment['user_id']),
+            "trip_id": str(payment['trip_id']),
+            "payment_amount": float(payment['payment_amount']) if payment['payment_amount'] else None,
+            "payment_method": payment['payment_method'],
+            "payment_date": payment['payment_date'].isoformat() if payment['payment_date'] else None,
+            "payment_voucher_url": payment['payment_voucher_url'],
+            "payment_status": payment['payment_status']
+        }
+        
+        return jsonify(payment_data), 200
+
+    except psycopg2.Error as db_error:
+        app.logger.error(f"Error de base de datos: {db_error}")
+        app.logger.error(f"Código de error: {db_error.pgcode}")
+        app.logger.error(f"Detalles del error: {db_error.pgerror}")
+
+        return jsonify({"error": f"Error al obtener información del pago: {str(db_error)}"}), 500
+
+    except Exception as e:
+        app.logger.error(f"Error inesperado: {e}")
+        app.logger.error(f"Traceback: {traceback.format_exc()}")
+
+        return jsonify({"error": f"Error inesperado al obtener información del pago: {str(e)}"}), 500
+    
+    finally:
+        if cursor:
+            cursor.close()
+        if connection:
+            connection.close()
+
 @app.route('/trips/action', methods=['POST'])
 def trip_action():
     """
