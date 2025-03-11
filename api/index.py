@@ -2271,9 +2271,14 @@ def create_payment():
         payment_date = request_data.get('payment_date')
         payment_status = 'pending'
 
+        # More detailed logging of input data
+        app.logger.info(f"Attempting to create payment for reservation:")
+        app.logger.info(f"User ID: {user_id}")
+        app.logger.info(f"Trip ID: {trip_id}")
+        app.logger.info(f"Payment Amount: {payment_amount}")
+
         # Validate required fields
-        required_fields = [user_id, trip_id, payment_amount, payment_method, payment_voucher_url]
-        if not all(required_fields):
+        if not all([user_id, trip_id, payment_amount, payment_method, payment_voucher_url]):
             app.logger.warning(f"Missing required fields. Received: {request_data}")
             return jsonify({"error": "Datos de pago incompletos"}), 400
 
@@ -2286,70 +2291,81 @@ def create_payment():
             return jsonify({"error": "Error de conexión a la base de datos"}), 500
 
         try:
-            # Verify user exists
-            cursor.execute("SELECT id FROM users WHERE id = %s", (user_id,))
-            if not cursor.fetchone():
-                app.logger.warning(f"User not found: {user_id}")
-                return jsonify({"error": "Usuario no encontrado"}), 404
+            # First, verify the reservation exists and matches the user and trip
+            cursor.execute("""
+                SELECT id FROM reservations 
+                WHERE user_id = %s AND trip_id = %s
+            """, (user_id, trip_id))
+            reservation = cursor.fetchone()
+            
+            if not reservation:
+                app.logger.warning(f"No reservation found for user {user_id} and trip {trip_id}")
+                return jsonify({"error": "Reserva no encontrada"}), 404
 
-            # Verify trip exists
-            cursor.execute("SELECT id FROM trips WHERE id = %s", (trip_id,))
-            if not cursor.fetchone():
-                app.logger.warning(f"Trip not found: {trip_id}")
-                return jsonify({"error": "Viaje no encontrado"}), 404
+            # Check if payment for this reservation already exists
+            cursor.execute("""
+                SELECT id FROM payments 
+                WHERE user_id = %s AND trip_id = %s
+            """, (user_id, trip_id))
+            existing_payment = cursor.fetchone()
+            
+            if existing_payment:
+                app.logger.warning(f"Payment already exists for reservation")
+                return jsonify({"error": "Ya existe un pago para esta reserva"}), 400
 
             # Insert payment
-            try:
-                cursor.execute("""
-                    INSERT INTO payments (
-                        user_id, 
-                        trip_id, 
-                        payment_amount, 
-                        payment_method, 
-                        payment_date, 
-                        payment_voucher_url,
-                        payment_status
-                    ) VALUES (%s, %s, %s, %s, %s, %s, %s)
-                    RETURNING id
-                """, (
+            cursor.execute("""
+                INSERT INTO payments (
                     user_id, 
                     trip_id, 
                     payment_amount, 
-                    payment_method,
-                    payment_date,
+                    payment_method, 
+                    payment_date, 
                     payment_voucher_url,
                     payment_status
-                ))
-                
-                # Get the inserted payment ID
-                payment_id = cursor.fetchone()[0]
-                
-                # Commit transaction
-                connection.commit()
-                
-                app.logger.info(f"Payment created successfully: {payment_id}")
-                
-                return jsonify({
-                    "message": "Pago iniciado correctamente", 
-                    "payment_id": payment_id
-                }), 201
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s)
+                RETURNING id
+            """, (
+                user_id, 
+                trip_id, 
+                payment_amount, 
+                payment_method,
+                payment_date,
+                payment_voucher_url,
+                payment_status
+            ))
             
-            except psycopg2.Error as db_error:
-                # Rollback in case of database error
-                connection.rollback()
-                app.logger.error(f"Database insertion error: {db_error}")
-                app.logger.error(f"Error details: {db_error.pgerror}")
-                app.logger.error(f"Error context: {db_error.diag}")
-                return jsonify({"error": f"Error al insertar pago: {str(db_error)}"}), 500
+            # Get the inserted payment ID
+            payment_id = cursor.fetchone()[0]
             
-            except Exception as insertion_error:
-                connection.rollback()
-                app.logger.error(f"Unexpected insertion error: {insertion_error}")
-                return jsonify({"error": "Error al insertar pago"}), 500
+            # Commit transaction
+            connection.commit()
+            
+            app.logger.info(f"Payment created successfully: {payment_id}")
+            
+            return jsonify({
+                "message": "Pago iniciado correctamente", 
+                "payment_id": payment_id
+            }), 201
         
-        except Exception as query_error:
-            app.logger.error(f"Query execution error: {query_error}")
-            return jsonify({"error": "Error al procesar la consulta"}), 500
+        except psycopg2.Error as db_error:
+            # Rollback in case of database error
+            connection.rollback()
+            app.logger.error(f"Database insertion error: {db_error}")
+            app.logger.error(f"Error details: {db_error.pgerror}")
+            app.logger.error(f"Error context: {db_error.diag}")
+            return jsonify({"error": f"Error al insertar pago: {str(db_error)}"}), 500
+        
+        except Exception as insertion_error:
+            connection.rollback()
+            app.logger.error(f"Unexpected insertion error: {insertion_error}")
+            app.logger.error(f"Error type: {type(insertion_error)}")
+            app.logger.error(f"Error details: {str(insertion_error)}")
+            
+            import traceback
+            app.logger.error(f"Traceback: {traceback.format_exc()}")
+            
+            return jsonify({"error": "Error al insertar pago"}), 500
         
         finally:
             # Close cursor and connection
@@ -2361,8 +2377,14 @@ def create_payment():
     except Exception as unexpected_error:
         # Catch any unexpected errors
         app.logger.error(f"Unexpected error: {unexpected_error}")
+        app.logger.error(f"Error type: {type(unexpected_error)}")
+        app.logger.error(f"Error details: {str(unexpected_error)}")
+        
+        import traceback
+        app.logger.error(f"Traceback: {traceback.format_exc()}")
+        
         return jsonify({"error": "Error inesperado al procesar el pago"}), 500
-       
+        
 @app.route('/trips/action', methods=['POST'])
 def trip_action():
     """
