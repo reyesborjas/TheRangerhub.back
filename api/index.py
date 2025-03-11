@@ -901,6 +901,51 @@ def associate_activity_trip():
         logging.error(f"Error general: {str(e)}")
         return jsonify({"message": "Error procesando la solicitud"}), 500
 
+@app.route('/trips/<trip_id>/status', methods=['GET'])
+def get_trip_status(trip_id):
+    connection = None
+    cursor = None
+
+    try:
+        connection = get_db_connection()
+        cursor = connection.cursor()
+
+        # Obtener el estado actual del viaje
+        cursor.execute("""
+            SELECT trip_status
+            FROM trips
+            WHERE id = %s
+        """, (trip_id,))
+        
+        result = cursor.fetchone()
+        
+        if not result:
+            return jsonify({"error": "Viaje no encontrado"}), 404
+        
+        return jsonify({
+            "status": result['trip_status'],
+            "trip_id": trip_id
+        }), 200
+
+    except psycopg2.Error as db_error:
+        app.logger.error(f"Error de base de datos: {db_error}")
+        app.logger.error(f"Código de error: {db_error.pgcode}")
+        app.logger.error(f"Detalles del error: {db_error.pgerror}")
+
+        return jsonify({"error": f"Error al obtener estado del viaje: {str(db_error)}"}), 500
+
+    except Exception as e:
+        app.logger.error(f"Error inesperado: {e}")
+        app.logger.error(f"Traceback: {traceback.format_exc()}")
+
+        return jsonify({"error": f"Error inesperado al obtener estado del viaje: {str(e)}"}), 500
+    
+    finally:
+        if cursor:
+            cursor.close()
+        if connection:
+            connection.close()
+
 @app.route('/trips/<trip_id>/activities', methods=['GET'])
 def get_trip_activities(trip_id):
     connection = get_db_connection()
