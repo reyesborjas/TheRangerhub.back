@@ -4067,6 +4067,172 @@ def get_trip_ranger_rating(trip_id):
     finally:
         if 'cursor' in locals(): cursor.close()
         if connection: connection.close()
-                     
+# Endpoint para obtener el número de viajes liderados por un Ranger
+
+@app.route('/api/rangers/<string:ranger_id>/trips-count', methods=['GET'])
+def get_ranger_trips_count(ranger_id):
+    """Obtiene el número de viajes que ha liderado un Ranger"""
+    connection = get_db_connection()
+    if not connection:
+        return jsonify({"error": "Database connection failed"}), 500
+
+    try:
+        cursor = connection.cursor(cursor_factory=RealDictCursor)
+        
+        # Verificar que el Ranger existe
+        cursor.execute("SELECT id FROM users WHERE id = %s", (ranger_id,))
+        if not cursor.fetchone():
+            return jsonify({"error": "Ranger no encontrado"}), 404
+        
+        # Contar el número de viajes donde este usuario es el lead_ranger
+        cursor.execute("""
+            SELECT COUNT(*) as trips_count
+            FROM trips
+            WHERE lead_ranger = %s
+        """, (ranger_id,))
+        
+        result = cursor.fetchone()
+        
+        return jsonify({
+            "ranger_id": ranger_id,
+            "trips_count": result['trips_count']
+        }), 200
+        
+    except Exception as e:
+        import traceback
+        error_details = traceback.format_exc()
+        print(f"Error en get_ranger_trips_count: {str(e)}\n{error_details}")
+        return jsonify({"error": "Error interno al obtener conteo de viajes", "details": str(e)}), 500
+    finally:
+        if 'cursor' in locals(): cursor.close()
+        if connection: connection.close()
+
+
+# Endpoint para obtener información completa de un Ranger (incluyendo conteo de viajes)
+@app.route('/api/rangers/<string:ranger_id>', methods=['GET'])
+def get_ranger_details(ranger_id):
+    """Obtiene los detalles completos de un Ranger, incluyendo su conteo de viajes"""
+    connection = get_db_connection()
+    if not connection:
+        return jsonify({"error": "Database connection failed"}), 500
+
+    try:
+        cursor = connection.cursor(cursor_factory=RealDictCursor)
+        
+        # Obtener detalles del Ranger e incluir conteo de viajes en una sola consulta
+        cursor.execute("""
+            SELECT 
+                u.id,
+                u.first_name,
+                u.last_name,
+                u.email,
+                u.username,
+                u.profile_picture_url,
+                u.calification,
+                u.is_active,
+                u.created_at,
+                r.title,
+                r.bio,
+                r.specialties,
+                (SELECT COUNT(*) FROM trips t WHERE t.lead_ranger = u.id) as trips_count
+            FROM 
+                users u
+            LEFT JOIN 
+                ranger_details r ON u.id = r.user_id
+            WHERE 
+                u.id = %s
+        """, (ranger_id,))
+        
+        ranger = cursor.fetchone()
+        if not ranger:
+            return jsonify({"error": "Ranger no encontrado"}), 404
+        
+        # Formatear los datos para la respuesta
+        formatted_ranger = {
+            "id": str(ranger["id"]),
+            "name": f"{ranger['first_name']} {ranger['last_name']}",
+            "username": ranger["username"],
+            "email": ranger["email"],
+            "photo": ranger["profile_picture_url"],
+            "rating": float(ranger["calification"]) if ranger["calification"] is not None else 0.0,
+            "title": ranger["title"] or "Ranger",
+            "bio": ranger["bio"] or "",
+            "specialties": ranger["specialties"] or [],
+            "isAvailable": ranger["is_active"] or False,
+            "trips": int(ranger["trips_count"]),
+            "created_at": ranger["created_at"].isoformat() if ranger["created_at"] else None
+        }
+        
+        return jsonify(formatted_ranger), 200
+        
+    except Exception as e:
+        import traceback
+        error_details = traceback.format_exc()
+        print(f"Error en get_ranger_details: {str(e)}\n{error_details}")
+        return jsonify({"error": "Error interno al obtener detalles del Ranger", "details": str(e)}), 500
+    finally:
+        if 'cursor' in locals(): cursor.close()
+        if connection: connection.close()
+
+
+# Endpoint para obtener lista de Rangers (con conteo de viajes)
+@app.route('/api/rangers', methods=['GET'])
+def get_rangers_list():
+    """Obtiene la lista de todos los Rangers con su información básica y conteo de viajes"""
+    connection = get_db_connection()
+    if not connection:
+        return jsonify({"error": "Database connection failed"}), 500
+
+    try:
+        cursor = connection.cursor(cursor_factory=RealDictCursor)
+        
+        # Obtener todos los Ranger (usuarios con rol de ranger) con conteo de viajes
+        cursor.execute("""
+            SELECT 
+                u.id,
+                u.first_name,
+                u.last_name,
+                u.profile_picture_url,
+                u.calification,
+                u.is_active,
+                r.title,
+                (SELECT COUNT(*) FROM trips t WHERE t.lead_ranger = u.id) as trips_count
+            FROM 
+                users u
+            JOIN 
+                user_roles ur ON u.role_id = ur.id
+            LEFT JOIN 
+                ranger_details r ON u.id = r.user_id
+            WHERE 
+                ur.role_name = 'Ranger'
+            ORDER BY
+                u.calification DESC NULLS LAST
+        """)
+        
+        rangers = cursor.fetchall()
+        
+        # Formatear los datos para la respuesta
+        formatted_rangers = []
+        for ranger in rangers:
+            formatted_rangers.append({
+                "id": str(ranger["id"]),
+                "name": f"{ranger['first_name']} {ranger['last_name']}",
+                "photo": ranger["profile_picture_url"],
+                "rating": float(ranger["calification"]) if ranger["calification"] is not None else 0.0,
+                "title": ranger["title"] or "Ranger",
+                "isAvailable": ranger["is_active"] or False,
+                "trips": int(ranger["trips_count"])
+            })
+        
+        return jsonify({"rangers": formatted_rangers}), 200
+        
+    except Exception as e:
+        import traceback
+        error_details = traceback.format_exc()
+        print(f"Error en get_rangers_list: {str(e)}\n{error_details}")
+        return jsonify({"error": "Error interno al obtener lista de Rangers", "details": str(e)}), 500
+    finally:
+        if 'cursor' in locals(): cursor.close()
+        if connection: connection.close()             
 if __name__ == "__main__":
     app.run(host="0.0.0.0", debug=True, port=5000)
