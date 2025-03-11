@@ -20,9 +20,12 @@ app = Flask(__name__)
 # Combined CORS configuration
 CORS(app, resources={
     r"/*": {
-        "origins": ["http://localhost:5173"],  # Tu URL de frontend en desarrollo
+        "origins": ["http://localhost:5173", "https://rangerhub-front.vercel.app"],
         "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-        "allow_headers": ["Content-Type"]
+        "allow_headers": ["Content-Type", "Authorization", "Accept"],
+        "expose_headers": ["Content-Type", "Authorization"],
+        "supports_credentials": True
+        
     }
 })
 
