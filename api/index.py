@@ -2254,9 +2254,11 @@ def delete_activity_trip(trip_id, activity_id):
             conn.close()
         print(f"Error al eliminar: {str(e)}")
         return jsonify({"message": f"Error al eliminar la actividad: {str(e)}"}), 500
-
 @app.route('/payments', methods=['POST'])
 def create_payment():
+    connection = None
+    cursor = None
+    
     try:
         # Obtener datos del request
         data = request.get_json()
@@ -2272,12 +2274,18 @@ def create_payment():
         payment_date = data.get('payment_date', datetime.now().date())
         payment_status = 'Pendiente'
 
+        # Registro detallado de datos recibidos
+        app.logger.info(f"Datos de pago recibidos: {data}")
+
         # Validaciones básicas
         if not all([user_id, trip_id, payment_amount, payment_method, payment_voucher_url]):
+            app.logger.warning("Datos de pago incompletos")
             return jsonify({"error": "Datos de pago incompletos"}), 400
 
         # Establecer conexión a la base de datos
         connection = get_db_connection()
+        
+        # Usar cursor normal en lugar de RealDictCursor para esta operación
         cursor = connection.cursor()
 
         try:
@@ -2304,10 +2312,24 @@ def create_payment():
             ))
             
             # Obtener el ID del pago insertado
-            payment_id = cursor.fetchone()[0]
+            result = cursor.fetchone()
+            
+            # Registrar resultado de la inserción
+            app.logger.info(f"Resultado de inserción: {result}")
+            
+            # Verificar si se insertó correctamente
+            if result is None:
+                app.logger.error("No se pudo insertar el pago")
+                connection.rollback()
+                return jsonify({"error": "No se pudo crear el pago"}), 500
+            
+            # Obtener el ID del pago
+            payment_id = result[0]
             
             # Commit de la transacción
             connection.commit()
+            
+            app.logger.info(f"Pago creado exitosamente. ID: {payment_id}")
             
             return jsonify({
                 "message": "Pago iniciado correctamente", 
@@ -2316,23 +2338,49 @@ def create_payment():
         
         except psycopg2.Error as e:
             # Rollback en caso de error
-            connection.rollback()
+            if connection:
+                connection.rollback()
+            
+            # Registrar error detallado
+            app.logger.error(f"Error de base de datos: {e}")
+            app.logger.error(f"Código de error: {e.pgcode}")
+            app.logger.error(f"Detalles del error: {e.pgerror}")
             
             # Manejar errores específicos
             if e.pgcode == '23505':  # Violación de restricción única
                 return jsonify({"error": "El comprobante de pago ya ha sido registrado"}), 400
             
-            return jsonify({"error": "Error al procesar el pago"}), 500
+            return jsonify({"error": f"Error al procesar el pago: {str(e)}"}), 500
         
         finally:
             # Cerrar cursor y conexión
-            cursor.close()
-            connection.close()
+            if cursor:
+                cursor.close()
+            if connection:
+                connection.close()
     
     except Exception as e:
         # Manejo de errores generales
-        return jsonify({"error": "Error inesperado al procesar el pago"}), 500
-           
+        app.logger.error(f"Error inesperado: {e}")
+        app.logger.error(traceback.format_exc())
+        return jsonify({"error": f"Error inesperado al procesar el pago: {str(e)}"}), 500
+
+def get_db_connection():
+    """Conecta a la base de datos PostgreSQL"""
+    try:
+        # Usa cursor por defecto en lugar de RealDictCursor para esta operación
+        connection = psycopg2.connect(
+            dbname=os.getenv("DATABASE_NAME"),
+            user=os.getenv("DATABASE_USER"),
+            password=os.getenv("DATABASE_PASSWORD"),
+            host=os.getenv("DATABASE_HOST"),
+            port=os.getenv("DATABASE_PORT")
+        )
+        return connection
+    except Exception as e:
+        logging.error(f"Error al conectar con la base de datos: {e}")
+        raise
+       
 @app.route('/trips/action', methods=['POST'])
 def trip_action():
     """
