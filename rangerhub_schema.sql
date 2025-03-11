@@ -50,7 +50,7 @@ CREATE TABLE trips (
 );
 
 
-CREATE TABLE payment (
+CREATE TABLE payments (
     id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
     user_id uuid NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
     trip_id uuid NOT NULL REFERENCES trips(id) ON DELETE NO ACTION,
